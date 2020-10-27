@@ -183,6 +183,9 @@ impl GalleryApp {
         for x in 0..factor {
             for y in 0..factor {
                 let fname= format!("{}/{}/{}/{}.jpg", inputfolder, factor, y, x);
+                if std::path::Path::new(&fname).exists() == false {
+                    panic!("Image not found {:?}", fname);
+                 }
                 println!("fname: {:?}", fname);
                 let blocks = GalleryApp::create_blocks( fname, blocksize);
                 let bytes = bincode::serialize(&blocks).unwrap();
@@ -366,10 +369,10 @@ mod tests {
         let img_file = "data/img_5_30_11.jpg";
         // this will create gallery with the same image to create
         // a gallery with different images comment the following line
-        GalleryApp::setup(&db_path, &img_file, block_size, factor);
+        // GalleryApp::setup(&db_path, &img_file, block_size, factor);
         // and uncomment the following two lines, update inputfolder to point
         // to the source of the gallery images
-        //let inputfolder = "data/progressive_f100";
-        //GalleryApp::setup_all(&db_path, inputfolder, block_size, factor);
+        let inputfolder = "data/progressive_f100";
+        GalleryApp::setup_all(&db_path, &inputfolder, block_size, factor);
     }
 }

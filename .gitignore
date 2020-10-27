@@ -1,0 +1,9 @@
+/client/build
+/client/node_modules
+/target/
+/data
+/data/test_data
+manager_started.flag
+/client/main
+/client/static
+log

@@ -2,7 +2,7 @@
 # 				 e.g $ make APP=gallery
 
 ifndef APP
-override APP = testapp
+override APP = gallery
 endif
 
 all: client/
