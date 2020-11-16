@@ -20,9 +20,29 @@ pub struct GreedyScheduler {
     pub utility: Array1<f32>,
     pub blocks_per_query: Array1<usize>,
     pub utility_matrix: Array2<f32>,
+    /// query space size
     pub total_queries: usize,
     pub tm: Arc<RwLock<ds::TimeManager>>,
+    /// the num of blocks assigned in each scheduler run
     pub batch: usize,
+}
+
+fn populate_utility_matrix(
+    utility_matrix: &mut Array2<f32>,
+    blocks_per_query: &Vec<usize>,
+    utility: &Array1<f32>,
+) {
+    ndarray::Zip::from(utility_matrix.genrows_mut())
+        .and(blocks_per_query)
+        .apply(|mut a_row, b_elt| {
+            for (i, v) in a_row.indexed_iter_mut() {
+                if i < *b_elt {
+                    *v = utility[i];
+                } else {
+                    *v = 0.0;
+                }
+            }
+        });
 }
 
 pub fn new(
@@ -34,19 +54,10 @@ pub fn new(
 ) -> GreedyScheduler {
     let total_queries = blocks_per_query.len();
     let max_blocks_count = utility.len();
+    // TODO: cost too much for large query space
     let mut utility_matrix: Array2<f32> = Array2::zeros((total_queries, max_blocks_count));
 
-    ndarray::Zip::from(utility_matrix.genrows_mut())
-        .and(&blocks_per_query)
-        .apply(|mut a_row, b_elt| {
-            for (i, v) in a_row.indexed_iter_mut() {
-                if i < *b_elt {
-                    *v = utility[i];
-                } else {
-                    *v = 0.0;
-                }
-            }
-        });
+    populate_utility_matrix(&mut utility_matrix, &blocks_per_query, &utility);
 
     let blocks_per_query: Array1<usize> = blocks_per_query.iter().map(|v| *v).collect();
 
@@ -338,7 +349,27 @@ impl GreedyScheduler {
         plan
     }
 
-    pub fn greedy_p(
+    fn sample_query_weighted_by_rewards(
+        &self,
+        rewards: &Array1<f32>,
+        rng: &mut rand::prelude::ThreadRng,
+    ) -> usize {
+        // using rewards as weights, sample from qids
+        let dist = match WeightedIndex::new(rewards) {
+            Ok(dist) => dist,
+            Err(e) => {
+                error!("{:?}", e);
+                return rewards.len(); // use len as invalid value
+            }
+        };
+        dist.sample(rng)
+    }
+
+    /**
+     * # Arguments
+     * * `horizon` - the number of slots to assign in cache
+     */
+    pub fn make_greedy_plan(
         &self,
         horizon: usize,
         prob_matrix: &mut Array2<f32>,
@@ -354,13 +385,13 @@ impl GreedyScheduler {
         for t in 0..horizon {
             let mut sum = 0.0;
             // for each qid, at time t get their probabilities
-            let p_qids = prob_matrix.slice_mut(s![..total_queries, t]);
+            let probs_current = prob_matrix.slice_mut(s![..total_queries, t]);
             // get the reward for each query according to how many blocks
 
-            for i in 0..p_qids.len() {
+            for i in 0..total_queries {
                 let nblocks = state[i];
                 if nblocks < self.blocks_per_query[i] {
-                    rewards[i] = utility[nblocks] * p_qids[i];
+                    rewards[i] = utility[nblocks] * probs_current[i];
                     sum += rewards[i];
                 } else {
                     rewards[i] = 0.0;
@@ -370,16 +401,8 @@ impl GreedyScheduler {
             if sum <= 0.0 {
                 break;
             }
-            // using rewards as weights, sample from qids
-            let dist = match WeightedIndex::new(&rewards) {
-                Ok(dist) => dist,
-                Err(e) => {
-                    error!("{:?} Invalid weight: {:?}", e, p_qids);
-                    continue;
-                }
-            };
 
-            let qid = dist.sample(&mut rng);
+            let qid = self.sample_query_weighted_by_rewards(&rewards, &mut rng);
             if state[qid] < utility.len() {
                 blocks.push(qid);
                 state[qid] += 1;
@@ -402,19 +425,16 @@ impl super::SchedulerTrait for GreedyScheduler {
     ///
     /// TODO: ADD BATCHES TO ACCOUNT FOR LARGE BUFFER SIZE + STATE + MANAGE DISTRIBUTION
     ///       REPRESENTATION
+    /// * `start_idx` - next available slot idx in cache
     fn run_scheduler(
         &mut self,
         probs: super::Prob,
         state: Array1<usize>,
         start_idx: usize,
     ) -> Vec<usize> {
-        // check state, update init_state
         let total_queries = self.total_queries;
         // dist indexed using the same index in queries vector
-        // get this from app? have one that the app and scheduler use to synchronise?
-        //let max_blocks_count = self.utility.len();
         let horizon = std::cmp::min(self.cachesize - start_idx, self.batch);
-        //let horizon = self.cachesize - start_idx;
 
         if total_queries == 0 {
             return Vec::new();
@@ -422,25 +442,14 @@ impl super::SchedulerTrait for GreedyScheduler {
 
         let plan: Vec<usize> = {
             // for each query, and for each slot in cache, store the probability of that query
-            let start = Instant::now();
             let mut prob_matrix = self.integrate_probs_slow(probs, total_queries, horizon);
-            //let (mut prob_matrix, queries_ids) = self.integrate_probs_partition(probs, total_queries, horizon);
-            //println!("---> materialized probs len: {}", queries_ids.len());
-            //let mut prob_matrix = self.integrate_probs(probs, total_queries, horizon);
-            debug!("integrate probs: {:?}", start.elapsed());
-            println!("integrate probs: {:?}", start.elapsed());
-            let start = Instant::now();
-            //let plan = self.sample_plan(&mut prob_matrix.view_mut(), self.utility_matrix.view(), horizon, total_queries, max_blocks_count, state);
-            let plan = self.greedy_p(
+            let plan = self.make_greedy_plan(
                 horizon,
                 &mut prob_matrix,
                 total_queries,
                 &self.utility,
                 state,
             );
-            //let plan = self.greedy_partition(queries_ids, horizon, &mut prob_matrix, total_queries, &self.utility, state);
-            debug!("greedy: {:?}", start.elapsed());
-            println!("greedy: {:?}", start.elapsed());
             plan
         };
 
