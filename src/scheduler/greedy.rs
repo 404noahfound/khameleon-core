@@ -81,8 +81,6 @@ impl GreedyScheduler {
         horizon: usize,
     ) -> Array2<f32> {
         let mut matrix: Array2<f32> = Array2::zeros((total_queries, horizon));
-        let mut index = 0;
-
         let tm = self.tm.read().unwrap();
         let mut deltas: Vec<usize> = Vec::new();
         let mut lows: Vec<usize> = Vec::new();
@@ -91,12 +89,12 @@ impl GreedyScheduler {
             lows.push(probs.get_lower_bound(t));
         }
         let horizon_delta = tm.slot_to_client_delta(horizon);
-
+        let mut query_id = 0;
         for mut row in matrix.genrows_mut() {
             for (t, v) in row.indexed_iter_mut() {
-                *v = probs.integrate_over_range(index, deltas[t], horizon_delta, lows[t]);
+                *v = probs.integrate_over_range(query_id, deltas[t], horizon_delta, lows[t]);
             }
-            index += 1;
+            query_id += 1;
         }
 
         matrix
