@@ -3,11 +3,11 @@ use crate::ds;
 
 /// public lib
 extern crate rand;
-use rand::Rng;
-use rand::distributions::WeightedIndex;
 use rand::distributions::Distribution;
-use std::sync::{Arc,  RwLock};
-use std::time::{Instant};
+use rand::distributions::WeightedIndex;
+use rand::Rng;
+use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 extern crate ndarray;
 use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
@@ -15,7 +15,7 @@ use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
 #[derive(Clone)]
 pub struct GreedyScheduler {
     /// longest future, client cache size in blocks
-    pub cachesize: usize, 
+    pub cachesize: usize,
     /// use indexmap instead?
     pub utility: Array1<f32>,
     pub blocks_per_query: Array1<usize>,
@@ -25,56 +25,66 @@ pub struct GreedyScheduler {
     pub batch: usize,
 }
 
-pub fn new(batch: usize, cachesize: usize, utility: Array1<f32>,
-           blocks_per_query: Vec<usize>,
-           tm: Arc<RwLock<ds::TimeManager>>) -> GreedyScheduler {
+pub fn new(
+    batch: usize,
+    cachesize: usize,
+    utility: Array1<f32>,
+    blocks_per_query: Vec<usize>,
+    tm: Arc<RwLock<ds::TimeManager>>,
+) -> GreedyScheduler {
     let total_queries = blocks_per_query.len();
     let max_blocks_count = utility.len();
     let mut utility_matrix: Array2<f32> = Array2::zeros((total_queries, max_blocks_count));
 
-    ndarray::Zip::from(utility_matrix.genrows_mut()).and(&blocks_per_query)
-                 .apply(|mut a_row, b_elt| {
-                     for (i, v) in a_row.indexed_iter_mut() {
-                         if i < *b_elt {
-                             *v = utility[i];
-                         } else {
-                             *v = 0.0;
-                         }
-
-                     }
-                 });
+    ndarray::Zip::from(utility_matrix.genrows_mut())
+        .and(&blocks_per_query)
+        .apply(|mut a_row, b_elt| {
+            for (i, v) in a_row.indexed_iter_mut() {
+                if i < *b_elt {
+                    *v = utility[i];
+                } else {
+                    *v = 0.0;
+                }
+            }
+        });
 
     let blocks_per_query: Array1<usize> = blocks_per_query.iter().map(|v| *v).collect();
 
-    GreedyScheduler {cachesize: cachesize, utility: utility, batch: batch,
-                     total_queries: total_queries, utility_matrix: utility_matrix,
-                     tm: tm,
-                     blocks_per_query: blocks_per_query}
+    GreedyScheduler {
+        cachesize: cachesize,
+        utility: utility,
+        batch: batch,
+        total_queries: total_queries,
+        utility_matrix: utility_matrix,
+        tm: tm,
+        blocks_per_query: blocks_per_query,
+    }
 }
-
-
 
 impl GreedyScheduler {
     #[inline]
-    pub fn integrate_probs_slow(&self, probs: super::Prob, total_queries: usize, horizon: usize) -> Array2<f32> {
+    pub fn integrate_probs_slow(
+        &self,
+        probs: super::Prob,
+        total_queries: usize,
+        horizon: usize,
+    ) -> Array2<f32> {
         let mut matrix: Array2<f32> = Array2::zeros((total_queries, horizon));
         let mut index = 0;
 
         let tm = self.tm.read().unwrap();
         let mut deltas: Vec<usize> = Vec::new();
         let mut lows: Vec<usize> = Vec::new();
-        
         for t in 0..horizon {
             deltas.push(tm.slot_to_client_delta(t));
             lows.push(probs.get_lower_bound(t));
         }
         let horizon_delta = tm.slot_to_client_delta(horizon);
 
-
         for mut row in matrix.genrows_mut() {
-                for (t, v) in row.indexed_iter_mut() {
-                    *v = probs.integrate_over_range(index, deltas[t], horizon_delta, lows[t]);
-                }
+            for (t, v) in row.indexed_iter_mut() {
+                *v = probs.integrate_over_range(index, deltas[t], horizon_delta, lows[t]);
+            }
             index += 1;
         }
 
@@ -88,16 +98,20 @@ impl GreedyScheduler {
     ///     i: query
     ///     t: time step
     ///     horizon:  max timestep
-    ///     where u_i,t means the sum probabilities from t to m for query i 
+    ///     where u_i,t means the sum probabilities from t to m for query i
     #[inline]
-    pub fn integrate_probs(&self, probs: super::Prob, total_queries: usize, horizon: usize) -> Array2<f32> {
+    pub fn integrate_probs(
+        &self,
+        probs: super::Prob,
+        total_queries: usize,
+        horizon: usize,
+    ) -> Array2<f32> {
         let mut matrix: Array2<f32> = Array2::zeros((total_queries, horizon));
         let mut index = 0;
 
         let tm = self.tm.read().unwrap();
         let mut deltas: Vec<usize> = Vec::new();
         let mut lows: Vec<usize> = Vec::new();
-        
         for t in 0..horizon {
             deltas.push(tm.slot_to_client_delta(t));
             lows.push(probs.get_lower_bound(t));
@@ -108,7 +122,7 @@ impl GreedyScheduler {
         let mut rest: Option<Array1<f32>> = None;
 
         // iterate over queries in probs and use their explicit probabilites
-        // then compute for a uniform 
+        // then compute for a uniform
         for mut row in matrix.genrows_mut() {
             if q_in_p.contains(&index) {
                 // compute the probability of the query over future timestamps
@@ -116,18 +130,24 @@ impl GreedyScheduler {
                     *v = probs.integrate_over_range(index, deltas[t], horizon_delta, lows[t]);
                 }
             } else {
-                    match &rest {
-                        Some(r) => {
-                            row.assign( &r.clone() );
-                        }, None => {
-                            let mut rest_prob: Array1<f32> = Array1::zeros(horizon);
-                            for (t, v) in rest_prob.indexed_iter_mut() {
-                                *v = probs.integrate_over_range(index, deltas[t], horizon_delta, lows[t]);
-                            }
-                            row.assign( &rest_prob.clone() );
-                            rest = Some( rest_prob );
-                        }
+                match &rest {
+                    Some(r) => {
+                        row.assign(&r.clone());
                     }
+                    None => {
+                        let mut rest_prob: Array1<f32> = Array1::zeros(horizon);
+                        for (t, v) in rest_prob.indexed_iter_mut() {
+                            *v = probs.integrate_over_range(
+                                index,
+                                deltas[t],
+                                horizon_delta,
+                                lows[t],
+                            );
+                        }
+                        row.assign(&rest_prob.clone());
+                        rest = Some(rest_prob);
+                    }
+                }
             }
             index += 1;
         }
@@ -135,14 +155,17 @@ impl GreedyScheduler {
         matrix
     }
 
-    pub fn integrate_probs_partition(&self, probs: super::Prob, total_queries: usize, horizon: usize)
-        -> (Array2<f32>, Array1<usize>) {
+    pub fn integrate_probs_partition(
+        &self,
+        probs: super::Prob,
+        total_queries: usize,
+        horizon: usize,
+    ) -> (Array2<f32>, Array1<usize>) {
         let mut rest_index = 0;
 
         let tm = self.tm.read().unwrap();
         let mut deltas: Vec<usize> = Vec::new();
         let mut lows: Vec<usize> = Vec::new();
-        
         for t in 0..horizon {
             deltas.push(tm.slot_to_client_delta(t));
             lows.push(probs.get_lower_bound(t));
@@ -152,12 +175,12 @@ impl GreedyScheduler {
         // queries with explicit probabilities, the rest are uniform
         let q_in_p = probs.get_k();
         // last element stores one id from uniform queries
-        let mut queries_ids: Array1<usize> = Array1::zeros(q_in_p.len()+1);
+        let mut queries_ids: Array1<usize> = Array1::zeros(q_in_p.len() + 1);
         // last row stores the uniform probability
-        let mut matrix: Array2<f32> = Array2::zeros((q_in_p.len()+1, horizon));
+        let mut matrix: Array2<f32> = Array2::zeros((q_in_p.len() + 1, horizon));
 
         // iterate over queries in probs and use their explicit probabilites
-        // then compute for a uniform 
+        // then compute for a uniform
 
         for (index, &qindex) in q_in_p.iter().enumerate() {
             let mut row = matrix.row_mut(index);
@@ -171,22 +194,27 @@ impl GreedyScheduler {
             }
         }
 
-        // 
+        //
         if rest_index < total_queries {
             let mut row = matrix.row_mut(q_in_p.len());
             for (t, v) in row.indexed_iter_mut() {
                 *v = probs.integrate_over_range(rest_index, deltas[t], horizon_delta, lows[t]);
             }
-            queries_ids[ q_in_p.len() ] = rest_index; 
+            queries_ids[q_in_p.len()] = rest_index;
         }
-
 
         (matrix, queries_ids)
     }
-    
-    pub fn greedy_partition(&self, queries_ids: Array1<usize>, horizon: usize, prob_matrix: &mut Array2<f32>,
-                total_queries: usize, utility: &Array1<f32>,
-                mut state: Array1<usize>) -> Vec<usize> {
+
+    pub fn greedy_partition(
+        &self,
+        queries_ids: Array1<usize>,
+        horizon: usize,
+        prob_matrix: &mut Array2<f32>,
+        total_queries: usize,
+        utility: &Array1<f32>,
+        mut state: Array1<usize>,
+    ) -> Vec<usize> {
         // state: for each query, how many blocks are scheduled
         // for each block slot in cache, which qid is filling the slot
         let mut blocks: Vec<usize> = Vec::new();
@@ -197,11 +225,10 @@ impl GreedyScheduler {
             // for each qid, at time t get their probabilities
             let p_qids = prob_matrix.slice_mut(s![..queries_ids.len(), t]);
             // get the reward for each query according to how many blocks
-            
-            for i in 0.. p_qids.len() {
+
+            for i in 0..p_qids.len() {
                 let qid = queries_ids[i];
                 let nblocks = state[qid];
-                
                 if nblocks < self.blocks_per_query[qid] {
                     rewards[i] = utility[nblocks] * p_qids[i];
                     sum += rewards[i];
@@ -219,23 +246,21 @@ impl GreedyScheduler {
                 Ok(dist) => dist,
                 Err(e) => {
                     error!("{:?} Invalid weight: {:?}", e, p_qids);
-                    continue
-                },
+                    continue;
+                }
             };
 
             let qindex = dist.sample(&mut rng);
             let qid = {
-                if qindex == queries_ids.len()-1 {
+                if qindex == queries_ids.len() - 1 {
                     let num = rng.gen_range(0, total_queries);
                     num
                 } else {
                     queries_ids[qindex]
                 }
-
             };
 
             // if the qid is last one then pick randomly from all set of queries
-            
             if state[qid] < utility.len() {
                 blocks.push(qid);
                 state[qid] += 1;
@@ -246,12 +271,18 @@ impl GreedyScheduler {
 
         blocks
     }
-    
-    pub fn sample_plan(&self, p_qids: &mut ArrayViewMut2<f32>, g_qids: ArrayView2<f32>,
-                   horizon: usize, total_queries: usize, max_blocks_count: usize,
-                   mut state: Array1<usize>) -> Vec<usize> {
+
+    pub fn sample_plan(
+        &self,
+        p_qids: &mut ArrayViewMut2<f32>,
+        g_qids: ArrayView2<f32>,
+        horizon: usize,
+        total_queries: usize,
+        max_blocks_count: usize,
+        mut state: Array1<usize>,
+    ) -> Vec<usize> {
         let mut plan: Vec<usize> = Vec::new();
-        let epsilon = 0.0;//1e-6;
+        let epsilon = 0.0; //1e-6;
         let mut rng = rand::thread_rng();
 
         assert!(g_qids.shape()[0] <= total_queries && g_qids.shape()[1] <= max_blocks_count);
@@ -261,17 +292,16 @@ impl GreedyScheduler {
             for i in 0..horizon {
                 let mut sum: f32 = 0.0;
                 for j in 0..total_queries {
-
                     let nblocks = state[j];
                     // instead fo this, use hashtable max_blocks_per_query
                     //if nblocks < max_blocks_count {
                     if nblocks < self.blocks_per_query[j] {
                         let rewards = g_qids.uget((j, nblocks)) * p_qids.uget((j, i));
-                        let mut_qids = p_qids.uget_mut((j,i));
+                        let mut_qids = p_qids.uget_mut((j, i));
                         *mut_qids = rewards;
                         sum += rewards;
                     } else {
-                        let mut_qids = p_qids.uget_mut((j,i));
+                        let mut_qids = p_qids.uget_mut((j, i));
                         *mut_qids = 0.0;
                     }
                 }
@@ -306,11 +336,16 @@ impl GreedyScheduler {
         }
 
         plan
-    } 
+    }
 
-    pub fn greedy_p(&self, horizon: usize, prob_matrix: &mut Array2<f32>,
-                total_queries: usize, utility: &Array1<f32>,
-                mut state: Array1<usize>) -> Vec<usize> {
+    pub fn greedy_p(
+        &self,
+        horizon: usize,
+        prob_matrix: &mut Array2<f32>,
+        total_queries: usize,
+        utility: &Array1<f32>,
+        mut state: Array1<usize>,
+    ) -> Vec<usize> {
         // state: for each query, how many blocks are scheduled
         // for each block slot in cache, which qid is filling the slot
         let mut blocks: Vec<usize> = Vec::new();
@@ -321,17 +356,15 @@ impl GreedyScheduler {
             // for each qid, at time t get their probabilities
             let p_qids = prob_matrix.slice_mut(s![..total_queries, t]);
             // get the reward for each query according to how many blocks
-            
-            for i in 0.. p_qids.len() {
+
+            for i in 0..p_qids.len() {
                 let nblocks = state[i];
-                
                 if nblocks < self.blocks_per_query[i] {
                     rewards[i] = utility[nblocks] * p_qids[i];
                     sum += rewards[i];
                 } else {
                     rewards[i] = 0.0;
                 }
-
             }
 
             if sum <= 0.0 {
@@ -342,8 +375,8 @@ impl GreedyScheduler {
                 Ok(dist) => dist,
                 Err(e) => {
                     error!("{:?} Invalid weight: {:?}", e, p_qids);
-                    continue
-                },
+                    continue;
+                }
             };
 
             let qid = dist.sample(&mut rng);
@@ -369,8 +402,12 @@ impl super::SchedulerTrait for GreedyScheduler {
     ///
     /// TODO: ADD BATCHES TO ACCOUNT FOR LARGE BUFFER SIZE + STATE + MANAGE DISTRIBUTION
     ///       REPRESENTATION
-    fn run_scheduler(&mut self, probs: super::Prob, state: Array1<usize>,
-                     start_idx: usize) -> Vec<usize> {
+    fn run_scheduler(
+        &mut self,
+        probs: super::Prob,
+        state: Array1<usize>,
+        start_idx: usize,
+    ) -> Vec<usize> {
         // check state, update init_state
         let total_queries = self.total_queries;
         // dist indexed using the same index in queries vector
@@ -383,7 +420,6 @@ impl super::SchedulerTrait for GreedyScheduler {
             return Vec::new();
         }
 
-
         let plan: Vec<usize> = {
             // for each query, and for each slot in cache, store the probability of that query
             let start = Instant::now();
@@ -395,7 +431,13 @@ impl super::SchedulerTrait for GreedyScheduler {
             println!("integrate probs: {:?}", start.elapsed());
             let start = Instant::now();
             //let plan = self.sample_plan(&mut prob_matrix.view_mut(), self.utility_matrix.view(), horizon, total_queries, max_blocks_count, state);
-            let plan = self.greedy_p(horizon, &mut prob_matrix, total_queries, &self.utility, state);
+            let plan = self.greedy_p(
+                horizon,
+                &mut prob_matrix,
+                total_queries,
+                &self.utility,
+                state,
+            );
             //let plan = self.greedy_partition(queries_ids, horizon, &mut prob_matrix, total_queries, &self.utility, state);
             debug!("greedy: {:?}", start.elapsed());
             println!("greedy: {:?}", start.elapsed());

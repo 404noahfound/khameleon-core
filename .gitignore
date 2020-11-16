@@ -7,3 +7,4 @@ manager_started.flag
 /client/main
 /client/static
 log
+.vscode/settings.json
