@@ -1,5 +1,5 @@
 extern crate image;
-use sled::{Db};
+use sled::Db;
 extern crate base64;
 
 #[derive(Clone)]
@@ -11,14 +11,15 @@ pub struct InMemBackend {
 impl InMemBackend {
     pub fn new(dbname: String) -> Self {
         // initialize backend server
-        let config = sled::ConfigBuilder::new()
-                .path(&dbname)
-                .build();
+        let config = sled::ConfigBuilder::new().path(&dbname).build();
 
-        InMemBackend{dbname: dbname, db:Db::start(config).unwrap()}
+        InMemBackend {
+            dbname: dbname,
+            db: Db::start(config).unwrap(),
+        }
     }
 
-    pub fn set(&mut self, key:Vec<u8>, val: Vec<u8>) {
+    pub fn set(&mut self, key: Vec<u8>, val: Vec<u8>) {
         let _ = self.db.set(key, val);
     }
 
@@ -28,7 +29,7 @@ impl InMemBackend {
 
     // get values stored at key @key
     // if it doesnt exist return None+ warning?
-    pub fn get(&self, key:Vec<u8>) -> Option<Vec<u8>> {
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         if let Some(bytes) = self.db.get(&key).unwrap() {
             Some(bytes.to_vec())
         } else {
@@ -48,20 +49,20 @@ impl InMemBackend {
         };
     }
 
-    pub fn collect_blocks_per_query(&self, f: fn(&Vec<u8>) -> usize) -> indexmap::IndexMap<String, usize> {
+    pub fn collect_blocks_per_query(
+        &self,
+        f: fn(&Vec<u8>) -> usize,
+    ) -> indexmap::IndexMap<String, usize> {
         let mut blocks_per_query: indexmap::IndexMap<String, usize> = indexmap::IndexMap::new();
         let iter = self.get_iter();
         for result in iter {
             match result {
-                Ok((k,v)) => {
+                Ok((k, v)) => {
                     let blocks_count = f(&v.to_vec());
                     let key = std::str::from_utf8(&k).unwrap();
                     debug!("k: {:?} count: {:?}", key.to_string(), blocks_count);
-                    blocks_per_query.insert(
-                        key.to_string(),
-                        blocks_count
-                    );
-                },
+                    blocks_per_query.insert(key.to_string(), blocks_count);
+                }
                 Err(err) => error!("{:?}", err),
             }
         }

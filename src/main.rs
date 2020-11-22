@@ -1,16 +1,16 @@
+mod apps;
+mod backend;
 /// local imports
 mod ds;
-mod scheduler;
 mod manager;
+mod scheduler;
 mod webserver;
-mod backend;
-mod apps;
 
-/// public libs
-extern crate lp_modeler;
-extern crate csv;
 extern crate crossbeam;
 extern crate crossbeam_utils;
+extern crate csv;
+/// public libs
+extern crate lp_modeler;
 
 #[macro_use]
 extern crate indexmap;
@@ -33,9 +33,9 @@ extern crate ndarray;
 
 use serde_json::json;
 
-use actix_web::{App, HttpServer, middleware};
-use actix_session::{CookieSession};
 use actix::prelude::*;
+use actix_session::CookieSession;
+use actix_web::{middleware, App, HttpServer};
 
 fn main() -> std::io::Result<()> {
     // setup logging environment
@@ -69,7 +69,7 @@ fn main() -> std::io::Result<()> {
                 colors_level.color(record.level()),
                 match record.line() {
                     Some(line) => line,
-                    None => 0
+                    None => 0,
                 },
                 message
             ))
@@ -79,7 +79,7 @@ fn main() -> std::io::Result<()> {
             fern::Dispatch::new()
                 .level(log_level)
                 .level_for("tokio_reactor", log::LevelFilter::Error)
-                .chain(std::io::stdout())
+                .chain(std::io::stdout()),
         )
         .chain(
             // write to file
@@ -87,12 +87,13 @@ fn main() -> std::io::Result<()> {
                 .level(log_level)
                 .level_for("tokio_reactor", log::LevelFilter::Error)
                 //.filter(|metadata| {
-                 //   metadata.target() == "khameleon::manager" || metadata.target() == "khameleon::apps::gallary" || metadata.target() == "khameleon::webserver::ws"
-               // })
+                //   metadata.target() == "khameleon::manager" || metadata.target() == "khameleon::apps::gallary" || metadata.target() == "khameleon::webserver::ws"
+                // })
                 .chain(fern::log_file("log/actix.log")?),
         )
         // Apply globally
-        .apply().unwrap();
+        .apply()
+        .unwrap();
 
     // Read command line arguments: config file name
     let args: Vec<String> = std::env::args().collect();
@@ -102,10 +103,12 @@ fn main() -> std::io::Result<()> {
             // pass this as argument
             let fname = &args[1];
             let file = std::fs::File::open(fname).expect("file should open read only");
-            let config: serde_json::Value = serde_json::from_reader(file).expect("JSON was not well-formatted");
+            let config: serde_json::Value =
+                serde_json::from_reader(file).expect("JSON was not well-formatted");
             debug!("config: {:?} {:?}", fname, config);
             config
-        }, false => json!({}), // empty config file
+        }
+        false => json!({}), // empty config file
     };
 
     info!("start server");
@@ -115,7 +118,6 @@ fn main() -> std::io::Result<()> {
     let imanager = manager::Manager::new(config);
     let manager_addr = imanager.start();
 
-
     // 3) Initialize &start server and websocket
     HttpServer::new(move || {
         App::new()
@@ -123,7 +125,7 @@ fn main() -> std::io::Result<()> {
             .configure(webserver::appconfig::config_app)
             // enable logger
             .wrap(middleware::Logger::default())
-            .wrap(CookieSession::signed(&[0;32]).secure(false))
+            .wrap(CookieSession::signed(&[0; 32]).secure(false))
     })
     .bind("0.0.0.0:8080")?
     .start();

@@ -1,12 +1,12 @@
-pub mod sender;
-pub mod scheduling;
 pub mod manager;
+pub mod scheduling;
+pub mod sender;
 
 // export
-pub use manager::{Manager, SystemStat, Request, Connect, Distributions, InitApp};
+pub use manager::{Connect, Distributions, InitApp, Manager, Request, SystemStat};
 
 extern crate ndarray;
-use ndarray::{Array1};
+use ndarray::Array1;
 
 #[derive(Clone, Debug)]
 pub struct CacheSimulator {
@@ -24,10 +24,12 @@ impl CacheSimulator {
         let cache_per_query: Array1<usize> = Array1::zeros(total_queries);
         let head = 0;
 
-        CacheSimulator{ cachesize: cachesize, cache: cache,
-                        cache_per_query: cache_per_query,
-                        head: head,
-                        }
+        CacheSimulator {
+            cachesize: cachesize,
+            cache: cache,
+            cache_per_query: cache_per_query,
+            head: head,
+        }
     }
 
     pub fn get_state(&self) -> (usize, Array1<usize>) {
@@ -59,7 +61,7 @@ impl CacheSimulator {
 
         self.cache[self.head] = qid as i32;
         self.cache_per_query[qid] += 1;
-        
+
         if self.head + 1 >= self.cachesize {
             self.reset()
         } else {
@@ -67,4 +69,3 @@ impl CacheSimulator {
         }
     }
 }
-

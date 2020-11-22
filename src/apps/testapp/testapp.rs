@@ -2,9 +2,9 @@ use serde_derive::{Deserialize, Serialize};
 use std::io::prelude::*;
 
 use super::AppTrait;
+use crate::backend;
 use crate::ds;
 use crate::scheduler;
-use crate::backend;
 
 #[derive(Clone)]
 pub struct TestApp {
@@ -21,7 +21,7 @@ pub fn new(_appstate: &ds::AppState, _config: serde_json::Value) -> TestApp {
     let db_path = "data/test_data".to_string();
     let backend: backend::inmem::InMemBackend;
     if std::path::Path::new(&db_path).exists() == true {
-       backend = backend::inmem::InMemBackend::new(db_path);
+        backend = backend::inmem::InMemBackend::new(db_path);
     } else {
         panic!("backend is not initialized {:?}", db_path);
     }
@@ -33,17 +33,29 @@ pub fn new(_appstate: &ds::AppState, _config: serde_json::Value) -> TestApp {
             let value: Vec<ImageBlock> = bincode::deserialize(&v).unwrap();
             let size = match value.iter().next() {
                 Some(v) => v.size(),
-                None => 0
+                None => 0,
             };
 
             size
-
-        }, _ => 0,
+        }
+        _ => 0,
     };
 
-    let max_blocks_count: usize = blocks_per_query.iter().map(|(_, v)| *v).max().unwrap_or_else(|| 0 );
-    let utility: Vec<f32> = (0..max_blocks_count).enumerate().map(|(i, _)| (1.0 / max_blocks_count as f32)*(i as f32+1.0) ).collect();
-    TestApp{blocks_per_query, utility, blocksize, backend}
+    let max_blocks_count: usize = blocks_per_query
+        .iter()
+        .map(|(_, v)| *v)
+        .max()
+        .unwrap_or_else(|| 0);
+    let utility: Vec<f32> = (0..max_blocks_count)
+        .enumerate()
+        .map(|(i, _)| (1.0 / max_blocks_count as f32) * (i as f32 + 1.0))
+        .collect();
+    TestApp {
+        blocks_per_query,
+        utility,
+        blocksize,
+        backend,
+    }
 }
 
 // app specific
@@ -63,7 +75,6 @@ impl ImageBlock {
     }
 }
 
-
 impl TestApp {
     fn count_blocks(v: &Vec<u8>) -> usize {
         let value: Vec<ImageBlock> = bincode::deserialize(&v).unwrap();
@@ -81,7 +92,11 @@ impl TestApp {
         let mut blocks = Vec::new();
         let mut start = 0;
 
-        let blocksize = if blocksize > img.len() { img.len() } else { blocksize };
+        let blocksize = if blocksize > img.len() {
+            img.len()
+        } else {
+            blocksize
+        };
         let mut end = blocksize;
 
         debug!("blocksize: {:?} end: {:?}", blocksize, end);
@@ -92,7 +107,10 @@ impl TestApp {
                 end = img.len();
             }
 
-            blocks.push( ImageBlock{block_id: bid, content: img[start..end].to_vec()} );
+            blocks.push(ImageBlock {
+                block_id: bid,
+                content: img[start..end].to_vec(),
+            });
             bid += 1;
             start = end;
             end += blocksize;
@@ -100,14 +118,23 @@ impl TestApp {
 
         blocks
     }
-    
-    fn get_nblocks_bytes(&self, key: &str, count: usize, incache: usize) -> Option::<Vec<ds::StreamBlock>> {
+
+    fn get_nblocks_bytes(
+        &self,
+        key: &str,
+        count: usize,
+        incache: usize,
+    ) -> Option<Vec<ds::StreamBlock>> {
         if let Some(blocks_bytes) = self.backend.get(key.as_bytes().to_vec()) {
             let mut sblocks: Vec<ds::StreamBlock> = Vec::new();
             let blocks: Vec<ImageBlock> = bincode::deserialize(&blocks_bytes).unwrap();
             let nblocks: u32 = blocks.len() as u32;
 
-            let end = if incache + count > blocks.len() { blocks.len() } else { incache + count };
+            let end = if incache + count > blocks.len() {
+                blocks.len()
+            } else {
+                incache + count
+            };
             for i in incache..end {
                 let block = &blocks[i];
                 let mut bytebuffer: Vec<u8> = Vec::new();
@@ -116,10 +143,10 @@ impl TestApp {
                 let mut nblock = bincode::serialize(&nblocks).unwrap();
                 let mut key_byte = bincode::serialize(&key).unwrap();
 
-                bytebuffer.append( &mut block_id );
-                bytebuffer.append( &mut nblock );
-                bytebuffer.append( &mut key_byte );
-                bytebuffer.append( &mut block_byte );
+                bytebuffer.append(&mut block_id);
+                bytebuffer.append(&mut nblock);
+                bytebuffer.append(&mut key_byte);
+                bytebuffer.append(&mut block_byte);
 
                 sblocks.push(ds::StreamBlock::Binary(bytebuffer));
             }
@@ -136,14 +163,16 @@ impl AppTrait for TestApp {
         (self.blocks_per_query.clone(), self.utility.clone())
     }
 
-    fn get_nblocks_byindex(&mut self, index: usize, count: usize,
-                           incache: usize) -> Option::<Vec<ds::StreamBlock>> {
+    fn get_nblocks_byindex(
+        &mut self,
+        index: usize,
+        count: usize,
+        incache: usize,
+    ) -> Option<Vec<ds::StreamBlock>> {
         let kv = self.blocks_per_query.get_index(index);
         debug!("get {:?}", kv);
         match kv {
-            Some((k, _)) => {
-                self.get_nblocks_bytes(k, count, incache)
-            },
+            Some((k, _)) => self.get_nblocks_bytes(k, count, incache),
             None => None,
         }
     }
@@ -153,7 +182,6 @@ impl AppTrait for TestApp {
         let total_queries = 1;
         let prob = scheduler::Prob::new(total_queries);
         prob
-
     }
 
     fn get_block_size(&self) -> usize {
@@ -169,7 +197,7 @@ mod tests {
     // create kv store with single image data (key=R1) with blocks of size 20KB
     // $ cargo test test_testapp_prepreocess_backend -- --nocapture
     fn test_testapp_preprocess_backend() {
-        let blocksize = 20*1024;
+        let blocksize = 20 * 1024;
         let image_path = "data/img_5_30_11.jpg";
         let db_path = "data/test_data";
         let blocks = TestApp::create_blocks(image_path.to_string(), blocksize);
@@ -177,9 +205,8 @@ mod tests {
         let mut backend = backend::inmem::InMemBackend::new(db_path.to_string());
         let bytes = bincode::serialize(&blocks).unwrap();
         let query = "R1";
-        let key  = query.as_bytes().to_vec();
+        let key = query.as_bytes().to_vec();
         backend.set(key, bytes.clone());
         backend.flush();
     }
 }
-
