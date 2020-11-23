@@ -450,9 +450,11 @@ impl AppTrait for GalleryApp {
         self.get_nblocks_bytes(key, count, incache)
     }
 
-    fn decode_dist(&mut self, userstate: ds::PredictorState) -> scheduler::Prob {
-        self.layout
-            .decode_dist(userstate, &self.layout_matrix, &self.blocks_per_query)
+    fn decode_dist(&mut self, userstate: ds::PredictorState) -> Box<dyn scheduler::ProbTrait> {
+        Box::new(
+            self.layout
+                .decode_dist(userstate, &self.layout_matrix, &self.blocks_per_query),
+        )
     }
 
     fn get_block_size(&self) -> usize {

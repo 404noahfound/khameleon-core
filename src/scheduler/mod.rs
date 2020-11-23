@@ -23,6 +23,7 @@ use crate::ds;
 pub use decoders::*;
 use ndarray::Array1;
 pub use prob::Prob;
+pub use prob::ProbTrait;
 use serde_derive::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
@@ -83,7 +84,12 @@ pub fn new(
 pub trait SchedulerTrait: Send + Sync + SchedulerClone {
     /// dist: hashmap[key] -> probability
     /// returns hashmap[key] -> block counts
-    fn run_scheduler(&mut self, probs: Prob, state: Array1<usize>, start_idx: usize) -> Vec<usize>;
+    fn run_scheduler(
+        &mut self,
+        probs: Box<dyn ProbTrait>,
+        state: Array1<usize>,
+        start_idx: usize,
+    ) -> Vec<usize>;
 }
 
 pub trait SchedulerClone {

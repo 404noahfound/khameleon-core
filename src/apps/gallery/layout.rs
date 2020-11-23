@@ -53,7 +53,7 @@ impl Layout {
         userstate: ds::PredictorState,
         layout_matrix: &Array2<f32>,
         queries_blcount: &indexmap::IndexMap<String, usize>,
-    ) -> scheduler::Prob {
+    ) -> impl scheduler::ProbTrait {
         // what about applications that are hard to enumerate all possible queries before hand
         debug!("userstate: {:?}", userstate);
         let decoded_dist = {

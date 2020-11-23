@@ -3,6 +3,7 @@ use crate::ds;
 
 /// public lib
 extern crate rand;
+use crate::scheduler::prob::ProbTrait;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::Rng;
@@ -72,100 +73,9 @@ pub fn new(
 }
 
 impl BFSScheduler {
-    #[inline]
-    pub fn integrate_probs_slow(
-        &self,
-        probs: super::Prob,
-        total_queries: usize,
-        horizon: usize,
-    ) -> Array2<f32> {
-        let mut matrix: Array2<f32> = Array2::zeros((total_queries, horizon));
-        let tm = self.tm.read().unwrap();
-        let mut deltas: Vec<usize> = Vec::new();
-        let mut lows: Vec<usize> = Vec::new();
-        for t in 0..horizon {
-            deltas.push(tm.slot_to_client_delta(t));
-            lows.push(probs.get_lower_bound(t));
-        }
-        let horizon_delta = tm.slot_to_client_delta(horizon);
-        let mut query_id = 0;
-        for mut row in matrix.genrows_mut() {
-            for (t, v) in row.indexed_iter_mut() {
-                *v = probs.integrate_over_range(query_id, deltas[t], horizon_delta, lows[t]);
-            }
-            query_id += 1;
-        }
-
-        matrix
-    }
-
-    /// Analytically compute area under linear curve from t to m
-    ///
-    /// For each query, integrate (e.g., sum) over probabilities
-    /// precompute u_i,t array
-    ///     i: query
-    ///     t: time step
-    ///     horizon:  max timestep
-    ///     where u_i,t means the sum probabilities from t to m for query i
-    #[inline]
-    pub fn integrate_probs(
-        &self,
-        probs: super::Prob,
-        total_queries: usize,
-        horizon: usize,
-    ) -> Array2<f32> {
-        let mut matrix: Array2<f32> = Array2::zeros((total_queries, horizon));
-        let mut index = 0;
-
-        let tm = self.tm.read().unwrap();
-        let mut deltas: Vec<usize> = Vec::new();
-        let mut lows: Vec<usize> = Vec::new();
-        for t in 0..horizon {
-            deltas.push(tm.slot_to_client_delta(t));
-            lows.push(probs.get_lower_bound(t));
-        }
-        let horizon_delta = tm.slot_to_client_delta(horizon);
-
-        let q_in_p = probs.get_k();
-        let mut rest: Option<Array1<f32>> = None;
-
-        // iterate over queries in probs and use their explicit probabilites
-        // then compute for a uniform
-        for mut row in matrix.genrows_mut() {
-            if q_in_p.contains(&index) {
-                // compute the probability of the query over future timestamps
-                for (t, v) in row.indexed_iter_mut() {
-                    *v = probs.integrate_over_range(index, deltas[t], horizon_delta, lows[t]);
-                }
-            } else {
-                match &rest {
-                    Some(r) => {
-                        row.assign(&r.clone());
-                    }
-                    None => {
-                        let mut rest_prob: Array1<f32> = Array1::zeros(horizon);
-                        for (t, v) in rest_prob.indexed_iter_mut() {
-                            *v = probs.integrate_over_range(
-                                index,
-                                deltas[t],
-                                horizon_delta,
-                                lows[t],
-                            );
-                        }
-                        row.assign(&rest_prob.clone());
-                        rest = Some(rest_prob);
-                    }
-                }
-            }
-            index += 1;
-        }
-
-        matrix
-    }
-
     pub fn integrate_probs_partition(
         &self,
-        probs: super::Prob,
+        probs: Box<dyn super::ProbTrait>,
         total_queries: usize,
         horizon: usize,
     ) -> (Array2<f32>, Array1<usize>) {
@@ -250,15 +160,9 @@ impl BFSScheduler {
                 break;
             }
             // using rewards as weights, sample from qids
-            let dist = match WeightedIndex::new(&rewards) {
-                Ok(dist) => dist,
-                Err(e) => {
-                    error!("{:?} Invalid weight: {:?}", e, p_qids);
-                    continue;
-                }
-            };
 
-            let qindex = dist.sample(&mut rng);
+            // if the qid is last one then pick randomly from all set of queries
+            let qindex = self.sample_query_weighted_by_rewards(&rewards, &mut rng);
             let qid = {
                 if qindex == queries_ids.len() - 1 {
                     let num = rng.gen_range(0, total_queries);
@@ -268,7 +172,6 @@ impl BFSScheduler {
                 }
             };
 
-            // if the qid is last one then pick randomly from all set of queries
             if state[qid] < utility.len() {
                 blocks.push(qid);
                 state[qid] += 1;
@@ -278,72 +181,6 @@ impl BFSScheduler {
         }
 
         blocks
-    }
-
-    pub fn sample_plan(
-        &self,
-        p_qids: &mut ArrayViewMut2<f32>,
-        g_qids: ArrayView2<f32>,
-        horizon: usize,
-        total_queries: usize,
-        max_blocks_count: usize,
-        mut state: Array1<usize>,
-    ) -> Vec<usize> {
-        let mut plan: Vec<usize> = Vec::new();
-        let epsilon = 0.0; //1e-6;
-        let mut rng = rand::thread_rng();
-
-        assert!(g_qids.shape()[0] <= total_queries && g_qids.shape()[1] <= max_blocks_count);
-        assert!(p_qids.shape()[0] <= total_queries && p_qids.shape()[1] <= horizon);
-        unsafe {
-            // for each timestep
-            for i in 0..horizon {
-                let mut sum: f32 = 0.0;
-                for j in 0..total_queries {
-                    let nblocks = state[j];
-                    // instead fo this, use hashtable max_blocks_per_query
-                    //if nblocks < max_blocks_count {
-                    if nblocks < self.blocks_per_query[j] {
-                        let rewards = g_qids.uget((j, nblocks)) * p_qids.uget((j, i));
-                        let mut_qids = p_qids.uget_mut((j, i));
-                        *mut_qids = rewards;
-                        sum += rewards;
-                    } else {
-                        let mut_qids = p_qids.uget_mut((j, i));
-                        *mut_qids = 0.0;
-                    }
-                }
-
-                if sum > epsilon {
-                    let random = {
-                        let mut temp: f32 = 0.0;
-                        let rand: f32 = rng.gen();
-                        let val: f32 = rand * sum;
-                        let mut ret: usize = 1;
-                        // accept reject sampling
-                        for k in 0..total_queries {
-                            if temp < val {
-                                ret = k;
-                            } else {
-                                break;
-                            }
-
-                            temp += p_qids.uget((k, i));
-                        }
-
-                        ret
-                    };
-
-                    // this should be less than the block count for that query
-                    if state[random] < max_blocks_count {
-                        state[random] += 1;
-                        plan.push(random);
-                    }
-                }
-            }
-        }
-
-        plan
     }
 
     fn sample_query_weighted_by_rewards(
@@ -361,55 +198,6 @@ impl BFSScheduler {
         };
         dist.sample(rng)
     }
-
-    /**
-     * # Arguments
-     * * `horizon` - the number of slots to assign in cache
-     */
-    pub fn make_greedy_plan(
-        &self,
-        horizon: usize,
-        prob_matrix: &mut Array2<f32>,
-        total_queries: usize,
-        utility: &Array1<f32>,
-        mut state: Array1<usize>,
-    ) -> Vec<usize> {
-        // state: for each query, how many blocks are scheduled
-        // for each block slot in cache, which qid is filling the slot
-        let mut blocks: Vec<usize> = Vec::new();
-        let mut rng = rand::thread_rng();
-        let mut rewards: Array1<f32> = Array1::zeros(total_queries);
-        for t in 0..horizon {
-            let mut sum = 0.0;
-            // for each qid, at time t get their probabilities
-            let probs_current = prob_matrix.slice_mut(s![..total_queries, t]);
-            // get the reward for each query according to how many blocks
-
-            for i in 0..total_queries {
-                let nblocks = state[i];
-                if nblocks < self.blocks_per_query[i] {
-                    rewards[i] = utility[nblocks] * probs_current[i];
-                    sum += rewards[i];
-                } else {
-                    rewards[i] = 0.0;
-                }
-            }
-
-            if sum <= 0.0 {
-                break;
-            }
-
-            let qid = self.sample_query_weighted_by_rewards(&rewards, &mut rng);
-            if state[qid] < utility.len() {
-                blocks.push(qid);
-                state[qid] += 1;
-            } else {
-                continue;
-            }
-        }
-
-        blocks
-    }
 }
 
 impl super::SchedulerTrait for BFSScheduler {
@@ -425,7 +213,7 @@ impl super::SchedulerTrait for BFSScheduler {
     /// * `start_idx` - next available slot idx in cache
     fn run_scheduler(
         &mut self,
-        probs: super::Prob,
+        probs: Box<dyn super::ProbTrait>,
         state: Array1<usize>,
         start_idx: usize,
     ) -> Vec<usize> {
@@ -439,8 +227,10 @@ impl super::SchedulerTrait for BFSScheduler {
 
         let plan: Vec<usize> = {
             // for each query, and for each slot in cache, store the probability of that query
-            let mut prob_matrix = self.integrate_probs_slow(probs, total_queries, horizon);
-            let plan = self.make_greedy_plan(
+            let (mut prob_matrix, queries_ids) =
+                self.integrate_probs_partition(probs, total_queries, horizon);
+            let plan = self.greedy_partition(
+                queries_ids,
                 horizon,
                 &mut prob_matrix,
                 total_queries,
@@ -449,7 +239,6 @@ impl super::SchedulerTrait for BFSScheduler {
             );
             plan
         };
-
         plan
     }
 }

@@ -52,6 +52,21 @@ impl PointDist {
     }
 }
 
+pub trait ProbTrait {
+    fn get_probs_at(&self, key: usize, delta: usize) -> f32;
+    fn get_lower_bound(&self, delta_0: usize) -> usize;
+    fn get_k(&self) -> HashSet<usize> {
+        unimplemented!();
+    }
+    fn get_time(&self) -> Instant;
+    fn get(&self, key: usize, delta: usize) -> f32;
+    /// given a delta t0 (ms) in the future, compute
+    /// the probability until delta tm for qid.
+    ///
+    /// assumptopm: delta_m > delta_0
+    fn integrate_over_range(&self, qid: usize, delta_0: usize, delta_m: usize, low: usize) -> f32;
+}
+
 impl Prob {
     /// Helper to compute probability for a query at time t, if there are multiple distributions
     /// at various times in the future.
@@ -86,17 +101,6 @@ impl Prob {
         }
     }
 
-    pub fn get_k(&self) -> HashSet<usize> {
-        let mut all_queries: HashSet<usize> = HashSet::new();
-
-        for (_, p) in &self.probs_t {
-            all_queries = all_queries.union(&p.get_k()).map(|&k| k).collect();
-        }
-
-        all_queries.insert(self.point_dist.q_index);
-        all_queries
-    }
-
     /// # Arguments
     ///
     /// * `dist` - {key: query index, value:  prob as f32}. queries not included are assigned
@@ -121,31 +125,8 @@ impl Prob {
         self.point_dist.q_index = index;
     }
 
-    /// use the given time to query the model
-    #[inline]
-    pub fn get_probs_at(&self, key: usize, delta: usize) -> f32 {
-        let p = match self.probs_t.get(&delta) {
-            Some(probs) => probs.get(key),
-            None => self.inf,
-        };
-
-        self.get_linear_prob(key, p) // interpolate between point and gaussian distribution
-    }
-
     pub fn get_linear_prob(&self, key: usize, p: f32) -> f32 {
         self.point_dist.alpha * p + (1.0 - self.point_dist.alpha) * self.point_dist.get_prob(key)
-    }
-
-    /// get the probability for delta
-    /// interpolate between two deltas in the model
-    #[inline]
-    pub fn get(&self, key: usize, delta: usize) -> f32 {
-        let (low, up) = self.get_time_bounds(delta);
-        let p0 = self.get_probs_at(key, low);
-        let p1 = self.get_probs_at(key, up);
-        let slop = (p1 - p0) / (up - low) as f32;
-        let p = p0 + (delta - low) as f32 * slop;
-        p
     }
 
     /// get the lower and upper bounds for t
@@ -209,8 +190,47 @@ impl Prob {
 
         p
     }
+}
 
-    pub fn get_lower_bound(&self, delta_0: usize) -> usize {
+impl ProbTrait for Prob {
+    fn get_time(&self) -> Instant {
+        self.time
+    }
+
+    /// get the probability for delta
+    /// interpolate between two deltas in the model
+    #[inline]
+    fn get(&self, key: usize, delta: usize) -> f32 {
+        let (low, up) = self.get_time_bounds(delta);
+        let p0 = self.get_probs_at(key, low);
+        let p1 = self.get_probs_at(key, up);
+        let slop = (p1 - p0) / (up - low) as f32;
+        let p = p0 + (delta - low) as f32 * slop;
+        p
+    }
+    fn get_k(&self) -> HashSet<usize> {
+        let mut all_queries: HashSet<usize> = HashSet::new();
+
+        for (_, p) in &self.probs_t {
+            all_queries = all_queries.union(&p.get_k()).map(|&k| k).collect();
+        }
+
+        all_queries.insert(self.point_dist.q_index);
+        all_queries
+    }
+
+    /// use the given time to query the model
+    #[inline]
+    fn get_probs_at(&self, key: usize, delta: usize) -> f32 {
+        let p = match self.probs_t.get(&delta) {
+            Some(probs) => probs.get(key),
+            None => self.inf,
+        };
+
+        self.get_linear_prob(key, p) // interpolate between point and gaussian distribution
+    }
+
+    fn get_lower_bound(&self, delta_0: usize) -> usize {
         let mut low = 0;
         // delta_ms: for each state sent from client, delta_ms stores distribtions in x ms in the
         // future
@@ -228,13 +248,7 @@ impl Prob {
     /// the probability until delta tm for qid
     /// assumptopm: delta_m > delta_0
     #[inline]
-    pub fn integrate_over_range(
-        &self,
-        qid: usize,
-        delta_0: usize,
-        delta_m: usize,
-        low: usize,
-    ) -> f32 {
+    fn integrate_over_range(&self, qid: usize, delta_0: usize, delta_m: usize, low: usize) -> f32 {
         let mut p: f32 = 0.0;
         if delta_0 >= delta_m {
             return 0.0;

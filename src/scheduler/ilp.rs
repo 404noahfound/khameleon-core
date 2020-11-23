@@ -37,7 +37,7 @@ impl ILP {
     /// u_i, j, t = \sum_{k=1}^m prob(i, k) * g(j)
     ///
     pub fn compute_big_u(
-        probs: &super::Prob,
+        probs: Box<dyn super::ProbTrait>,
         total_queries: usize,
         cachesize: usize,
         utility: &Array1<f32>,
@@ -78,12 +78,12 @@ impl ILP {
 impl super::SchedulerTrait for ILP {
     fn run_scheduler(
         &mut self,
-        probs: super::Prob,
+        probs: Box<dyn super::ProbTrait>,
         _state: Array1<usize>,
         _start_idx: usize,
     ) -> Vec<usize> {
         let big_u = ILP::compute_big_u(
-            &probs,
+            probs,
             self.total_queries,
             self.cachesize,
             &self.utility,

@@ -47,7 +47,7 @@ pub trait AppTrait: Send + Sync {
     fn get_scheduler_config(&self) -> (indexmap::IndexMap<String, usize>, Vec<f32>);
 
     /// decode received distribution from the client and return information in Prob object
-    fn decode_dist(&mut self, userstate: ds::PredictorState) -> scheduler::Prob;
+    fn decode_dist(&mut self, userstate: ds::PredictorState) -> Box<dyn scheduler::ProbTrait>;
 
     /// return size of a block in Bytes
     fn get_block_size(&self) -> usize;

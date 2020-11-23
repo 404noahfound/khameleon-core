@@ -78,6 +78,9 @@ pub fn decode_point_model(point: &serde_json::Value) -> (f64, f64, f64) {
         None => (1.0, 0.0, 0.0),
     }
 }
+// pub fn decode_lazy_model(dist: &serde_json::Value, layout_matrix: &Array2<f32>) -> Prob {
+
+// }
 
 /// this is used if we stream model instead of explicit probs
 /// get list of queries and their layout -> for each query, compute prob given the layout

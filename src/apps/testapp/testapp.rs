@@ -177,11 +177,11 @@ impl AppTrait for TestApp {
         }
     }
 
-    fn decode_dist(&mut self, userstate: ds::PredictorState) -> scheduler::Prob {
+    fn decode_dist(&mut self, userstate: ds::PredictorState) -> Box<dyn scheduler::ProbTrait> {
         debug!("decode_dist: {:?}", userstate);
         let total_queries = 1;
         let prob = scheduler::Prob::new(total_queries);
-        prob
+        Box::new(prob)
     }
 
     fn get_block_size(&self) -> usize {

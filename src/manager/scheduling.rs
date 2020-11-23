@@ -31,7 +31,7 @@ pub fn start(
     // stats
     let mut round: usize = 1;
     // variables memory holder
-    let mut decoded_dist_copy: scheduler::Prob = scheduler::Prob::new(total_queries);
+    // let mut decoded_dist_copy: Box<dyn scheduler::ProbTrait>;
     let block_size = app.lock().unwrap().get_block_size(); // bytes
     let size_megabits = (block_size as f64 * 8.0) / (1024.0 * 1024.0);
 
@@ -56,9 +56,9 @@ pub fn start(
                 Ok(dist) => {
                     // new distribution
                     let dist = app.lock().unwrap().decode_dist(dist);
-                    decoded_dist_copy = dist.clone();
+                    // decoded_dist_copy = dist;
                     last_new_dist = Instant::now();
-                    tm.write().unwrap().update_time(dist.time.clone());
+                    tm.write().unwrap().update_time((dist).get_time());
 
                     dist
                 }
@@ -72,7 +72,7 @@ pub fn start(
                         info!("use old distribution {:?}", last_new_dist.elapsed());
 
                         last_new_dist = Instant::now();
-                        decoded_dist_copy.clone()
+                        Box::new(scheduler::Prob::new(total_queries))
                     } else {
                         continue;
                     }

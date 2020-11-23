@@ -3,11 +3,11 @@ use crate::ds;
 
 /// public lib
 extern crate rand;
+use crate::scheduler::prob::ProbTrait;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::Rng;
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
 
 extern crate ndarray;
 use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
@@ -75,7 +75,7 @@ pub fn new(
 impl GreedyScheduler {
     pub fn integrate_probs_partition(
         &self,
-        probs: super::Prob,
+        probs: Box<dyn super::ProbTrait>,
         total_queries: usize,
         horizon: usize,
     ) -> (Array2<f32>, Array1<usize>) {
@@ -213,7 +213,7 @@ impl super::SchedulerTrait for GreedyScheduler {
     /// * `start_idx` - next available slot idx in cache
     fn run_scheduler(
         &mut self,
-        probs: super::Prob,
+        probs: Box<dyn super::ProbTrait>,
         state: Array1<usize>,
         start_idx: usize,
     ) -> Vec<usize> {
