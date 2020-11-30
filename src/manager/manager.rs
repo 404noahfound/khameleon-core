@@ -215,10 +215,10 @@ impl Handler<Distributions> for Manager {
 
         if let Some(state) = &self.state {
             self.dist_counter += 1;
-            debug!(
-                "====> Manager Actor got new distribution {:?} -> {:?}",
-                self.dist_counter, userstate
-            );
+            // debug!(
+            //     "====> Manager Actor got new distribution {:?} -> {:?}",
+            //     self.dist_counter, userstate
+            // );
 
             match state.dist_tx.lock() {
                 Ok(v) => match v.try_send(userstate) {

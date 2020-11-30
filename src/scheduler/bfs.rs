@@ -1,12 +1,16 @@
 #[warn(dead_code)]
 use crate::ds;
 
+extern crate ordered_float;
 /// public lib
 extern crate rand;
 use crate::scheduler::prob::ProbTrait;
+use ordered_float::NotNan;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::Rng;
+use std::collections::BinaryHeap;
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 extern crate ndarray;
@@ -25,6 +29,8 @@ pub struct BFSScheduler {
     pub tm: Arc<RwLock<ds::TimeManager>>,
     /// the num of blocks assigned in each scheduler run
     pub batch: usize,
+
+    num_queries_searched: usize,
 }
 
 fn populate_utility_matrix(
@@ -69,117 +75,119 @@ pub fn new(
         utility_matrix: utility_matrix,
         tm: tm,
         blocks_per_query: blocks_per_query,
+        num_queries_searched: 100,
     }
 }
 
 impl BFSScheduler {
-    pub fn integrate_probs_partition(
-        &self,
-        probs: Box<dyn super::ProbTrait>,
-        total_queries: usize,
-        horizon: usize,
-    ) -> (Array2<f32>, Array1<usize>) {
-        let mut rest_index = 0;
+    #[inline]
+    fn neighbours(&self, query_id: usize) -> Vec<usize> {
+        const NEIGHBOUR_DELTAS: [[i32; 2]; 4] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        let mut neighbours: Vec<usize> = Vec::new();
+        let n = (self.total_queries as f32).sqrt() as i32;
+        let x0 = (query_id as i32) / n;
+        let y0 = (query_id as i32) % n;
+        for delta in &NEIGHBOUR_DELTAS {
+            let x1 = x0 + delta[0];
+            let y1 = y0 + delta[1];
+            if 0 <= x1 && x1 < n && 0 <= y1 && y1 < n {
+                neighbours.push((x1 * n + y1) as usize)
+            }
+        }
+        neighbours
+    }
 
-        let tm = self.tm.read().unwrap();
+    #[inline]
+    fn get_deltas_and_lower_bounds(
+        &self,
+        probs: &Box<dyn super::ProbTrait>,
+        horizon: usize,
+        tm: &std::sync::RwLockReadGuard<ds::TimeManager>,
+    ) -> (Vec<usize>, Vec<usize>) {
         let mut deltas: Vec<usize> = Vec::new();
         let mut lows: Vec<usize> = Vec::new();
         for t in 0..horizon {
             deltas.push(tm.slot_to_client_delta(t));
             lows.push(probs.get_lower_bound(t));
         }
-        let horizon_delta = tm.slot_to_client_delta(horizon);
-
-        // queries with explicit probabilities, the rest are uniform
-        let q_in_p = probs.get_k();
-        // last element stores one id from uniform queries
-        let mut queries_ids: Array1<usize> = Array1::zeros(q_in_p.len() + 1);
-        // last row stores the uniform probability
-        let mut matrix: Array2<f32> = Array2::zeros((q_in_p.len() + 1, horizon));
-
-        // iterate over queries in probs and use their explicit probabilites
-        // then compute for a uniform
-
-        for (index, &qindex) in q_in_p.iter().enumerate() {
-            let mut row = matrix.row_mut(index);
-            for (t, v) in row.indexed_iter_mut() {
-                // compute the probability of the query over future timestamps
-                *v = probs.integrate_over_range(qindex, deltas[t], horizon_delta, lows[t]);
-            }
-            queries_ids[index] = qindex;
-            if rest_index == qindex {
-                rest_index += 1;
-            }
-        }
-
-        //
-        if rest_index < total_queries {
-            let mut row = matrix.row_mut(q_in_p.len());
-            for (t, v) in row.indexed_iter_mut() {
-                *v = probs.integrate_over_range(rest_index, deltas[t], horizon_delta, lows[t]);
-            }
-            queries_ids[q_in_p.len()] = rest_index;
-        }
-
-        (matrix, queries_ids)
+        (deltas, lows)
     }
 
-    pub fn greedy_partition(
+    fn bfs_by_rewards(
         &self,
-        queries_ids: Array1<usize>,
-        horizon: usize,
-        prob_matrix: &mut Array2<f32>,
-        total_queries: usize,
-        utility: &Array1<f32>,
-        mut state: Array1<usize>,
-    ) -> Vec<usize> {
-        // state: for each query, how many blocks are scheduled
-        // for each block slot in cache, which qid is filling the slot
-        let mut blocks: Vec<usize> = Vec::new();
-        let mut rng = rand::thread_rng();
-        let mut rewards: Array1<f32> = Array1::zeros(queries_ids.len());
-        for t in 0..horizon {
-            let mut sum = 0.0;
-            // for each qid, at time t get their probabilities
-            let p_qids = prob_matrix.slice_mut(s![..queries_ids.len(), t]);
-            // get the reward for each query according to how many blocks
+        probs: &Box<dyn super::ProbTrait>,
+        query_num_blocks_in_cache: &Array1<usize>,
+        deltas: usize,
+        horizon_delta: usize,
+        lower_bound: usize,
+        rewards: &mut Array1<f32>,
+        query_ids: &mut Array1<usize>,
+        start_id: usize,
+    ) {
+        let mut visited_ids = HashSet::new();
+        let mut next_query_ids = BinaryHeap::new();
 
-            for i in 0..p_qids.len() {
-                let qid = queries_ids[i];
-                let nblocks = state[qid];
-                if nblocks < self.blocks_per_query[qid] {
-                    rewards[i] = utility[nblocks] * p_qids[i];
-                    sum += rewards[i];
-                } else {
-                    rewards[i] = 0.0;
+        // Insert the start point idx
+        let start_prob = probs.integrate_over_range(start_id, deltas, horizon_delta, lower_bound);
+        visited_ids.insert(start_id);
+        next_query_ids.push((NotNan::new(start_prob).unwrap(), start_id));
+
+        let mut reward_idx = 0;
+        while !next_query_ids.is_empty() && reward_idx < self.num_queries_searched {
+            let (next_prob, next_query_id) = next_query_ids.pop().unwrap();
+            rewards[reward_idx] = *next_prob;
+            query_ids[reward_idx] = next_query_id;
+            reward_idx += 1;
+            let neighbours = self.neighbours(next_query_id);
+            // debug!("neighbours for {:?} are {:?}", next_query_id, neighbours);
+            for neighbour_id in neighbours {
+                if !visited_ids.contains(&neighbour_id) {
+                    let neighbour_prob = probs.integrate_over_range(
+                        neighbour_id,
+                        deltas,
+                        horizon_delta,
+                        lower_bound,
+                    );
+                    visited_ids.insert(neighbour_id);
+                    next_query_ids.push((NotNan::new(neighbour_prob).unwrap(), neighbour_id));
                 }
-            }
-
-            if sum <= 0.0 {
-                println!("sum = zero {:?}", p_qids);
-                break;
-            }
-            // using rewards as weights, sample from qids
-
-            // if the qid is last one then pick randomly from all set of queries
-            let qindex = self.sample_query_weighted_by_rewards(&rewards, &mut rng);
-            let qid = {
-                if qindex == queries_ids.len() - 1 {
-                    let num = rng.gen_range(0, total_queries);
-                    num
-                } else {
-                    queries_ids[qindex]
-                }
-            };
-
-            if state[qid] < utility.len() {
-                blocks.push(qid);
-                state[qid] += 1;
-            } else {
-                continue;
             }
         }
 
+        for idx in 0..reward_idx {
+            rewards[idx] *= self.utility[query_num_blocks_in_cache[query_ids[idx]]];
+        }
+    }
+
+    fn generate_bfs_plan(
+        &self,
+        probs: Box<dyn super::ProbTrait>,
+        horizon: usize,
+        mut query_num_blocks_in_cache: Array1<usize>,
+    ) -> Vec<usize> {
+        let tm = self.tm.read().unwrap();
+        let (deltas, lows) = self.get_deltas_and_lower_bounds(&probs, horizon, &tm);
+        let horizon_delta = tm.slot_to_client_delta(horizon);
+        let mut rewards: Array1<f32> = Array1::zeros(self.num_queries_searched);
+        let mut query_ids: Array1<usize> = Array1::zeros(self.num_queries_searched);
+        let mut rng = rand::thread_rng();
+        let mut blocks: Vec<usize> = Vec::new();
+        for t in 0..horizon {
+            self.bfs_by_rewards(
+                &probs,
+                &query_num_blocks_in_cache,
+                deltas[t],
+                horizon_delta,
+                lows[t],
+                &mut rewards,
+                &mut query_ids,
+                1,
+            );
+            // debug!("rewards: {:?}, query_ids: {:?}", rewards, query_ids);
+            let qindex = self.sample_query_weighted_by_rewards(&rewards, &mut rng);
+            query_num_blocks_in_cache[query_ids[qindex]] += 1;
+            blocks.push(query_ids[qindex]);
+        }
         blocks
     }
 
@@ -227,16 +235,18 @@ impl super::SchedulerTrait for BFSScheduler {
 
         let plan: Vec<usize> = {
             // for each query, and for each slot in cache, store the probability of that query
-            let (mut prob_matrix, queries_ids) =
-                self.integrate_probs_partition(probs, total_queries, horizon);
-            let plan = self.greedy_partition(
-                queries_ids,
-                horizon,
-                &mut prob_matrix,
-                total_queries,
-                &self.utility,
-                state,
-            );
+            // let (mut prob_matrix, queries_ids) =
+            //     self.integrate_probs_partition(probs, total_queries, horizon);
+            // let plan = self.greedy_partition(
+            //     queries_ids,
+            //     horizon,
+            //     &mut prob_matrix,
+            //     total_queries,
+            //     &self.utility,
+            //     state,
+            // );
+            let plan = self.generate_bfs_plan(probs, horizon, state);
+            debug!("blocks sent: {:?}", plan);
             plan
         };
         plan

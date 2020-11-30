@@ -1231,6 +1231,7 @@ dependencies = [
  "log",
  "lp-modeler",
  "ndarray",
+ "ordered-float",
  "rand 0.7.3",
  "serde",
  "serde_derive",
@@ -1543,6 +1544,15 @@ name = "object"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37fd5004feb2ce328a52b0b3d01dbf4ffff72583493900ed15f22d4111c51693"
+
+[[package]]
+name = "ordered-float"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fe9037165d7023b1228bc4ae9a2fa1a2b0095eca6c2998c624723dfd01314a5"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "pagecache"

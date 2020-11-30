@@ -59,12 +59,18 @@ pub trait ProbTrait {
         unimplemented!();
     }
     fn get_time(&self) -> Instant;
-    fn get(&self, key: usize, delta: usize) -> f32;
+    fn get(&self, _key: usize, _delta: usize) -> f32 {
+        unimplemented!();
+    }
     /// given a delta t0 (ms) in the future, compute
     /// the probability until delta tm for qid.
     ///
     /// assumptopm: delta_m > delta_0
     fn integrate_over_range(&self, qid: usize, delta_0: usize, delta_m: usize, low: usize) -> f32;
+
+    fn get_center_query_id(&self) -> usize {
+        unimplemented!();
+    }
 }
 
 impl Prob {

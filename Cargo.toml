@@ -46,6 +46,8 @@ csv = "1.1.1"
 # $ sudo apt install coinor-cbc
 lp-modeler = "0.4.2"
 
+ordered-float = "2.0.0"
+
 # for falcon app
 #odbc = "0.14.0" # this needs: apt-get install unixodbc-dev
 #google-bigquery2 = "1.0"

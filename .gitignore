@@ -8,3 +8,4 @@ manager_started.flag
 /client/static
 log
 .vscode/settings.json
+.vscode/launch.json
