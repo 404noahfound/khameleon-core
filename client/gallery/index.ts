@@ -6,8 +6,8 @@ import { Gallery } from "../apps";
 
 const DEFAULT_APP_CONFIG = {
   dbname: "db_default_f10",
-  factor: 10,
-  tile_dimension: 10000,
+  factor: 250,
+  tile_dimension: 2500,
 
   request: 0, // direct request
   progressive: 1, // to adjust cache size

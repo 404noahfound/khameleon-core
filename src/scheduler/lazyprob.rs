@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Bound::{Excluded, Included};
 use std::time::Instant;
+#[derive(Clone, Debug)]
 pub struct LazyProb {
     total_queries: usize,
     probs_t: HashMap<usize, LazyProbInstance>,
@@ -40,6 +41,7 @@ impl LazyProb {
     pub fn set_point_dist(&mut self, alpha: f64, index: usize) {
         self.point_dist.alpha = alpha as f32;
         self.point_dist.q_index = index;
+        debug!("point dist set: {:?}", self.point_dist);
     }
 
     pub fn get_linear_prob(&self, key: usize, p: f32) -> f32 {
@@ -122,6 +124,9 @@ impl LazyProb {
 }
 
 impl ProbTrait for LazyProb {
+    fn print(&self) {
+        println!("lazy prob{:?}", &self);
+    }
     fn get_time(&self) -> Instant {
         self.time
     }
@@ -150,11 +155,12 @@ impl ProbTrait for LazyProb {
     }
 
     fn get_center_query_id(&self, delta: usize) -> usize {
-        let lower_bound = self.get_lower_bound(delta);
-        return match self.probs_t.get(&delta) {
-            Some(probs) => probs.get_center_query_id(),
-            None => 0,
-        };
+        self.point_dist.q_index
+        // let lower_bound = self.get_lower_bound(delta);
+        // return match self.probs_t.get(&lower_bound) {
+        //     Some(probs) => probs.get_center_query_id(),
+        //     None => 0,
+        // };
     }
 
     fn get_lower_bound(&self, delta_0: usize) -> usize {
@@ -205,6 +211,7 @@ impl ProbTrait for LazyProb {
 }
 
 /// LazyProb is assumed to be gaussian distribution
+#[derive(Clone, Debug)]
 pub struct LazyProbInstance {
     xmu: f64,
     ymu: f64,

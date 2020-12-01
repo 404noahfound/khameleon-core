@@ -9,10 +9,11 @@ use ordered_float::NotNan;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::Rng;
+use std::cmp::max;
+use std::cmp::min;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
-
 extern crate ndarray;
 use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
 
@@ -58,12 +59,12 @@ pub fn new(
     blocks_per_query: Vec<usize>,
     tm: Arc<RwLock<ds::TimeManager>>,
 ) -> BFSScheduler {
-    let total_queries = blocks_per_query.len();
+    let total_queries = 250 * 250;
     let max_blocks_count = utility.len();
     // TODO: cost too much for large query space
     let mut utility_matrix: Array2<f32> = Array2::zeros((total_queries, max_blocks_count));
 
-    populate_utility_matrix(&mut utility_matrix, &blocks_per_query, &utility);
+    // populate_utility_matrix(&mut utility_matrix, &blocks_per_query, &utility);
 
     let blocks_per_query: Array1<usize> = blocks_per_query.iter().map(|v| *v).collect();
 
@@ -75,7 +76,7 @@ pub fn new(
         utility_matrix: utility_matrix,
         tm: tm,
         blocks_per_query: blocks_per_query,
-        num_queries_searched: 100,
+        num_queries_searched: 1000,
     }
 }
 
@@ -154,8 +155,14 @@ impl BFSScheduler {
             }
         }
 
+        // println!("query_ids: {:?}", query_ids);
         for idx in 0..reward_idx {
-            rewards[idx] *= self.utility[query_num_blocks_in_cache[query_ids[idx]]];
+            let num_block_in_cache = query_num_blocks_in_cache[query_ids[idx]];
+            if num_block_in_cache < 50 {
+                rewards[idx] *= self.utility[num_block_in_cache];
+            } else {
+                rewards[idx] *= 0.;
+            }
         }
     }
 
@@ -168,11 +175,17 @@ impl BFSScheduler {
         let tm = self.tm.read().unwrap();
         let (deltas, lows) = self.get_deltas_and_lower_bounds(&probs, horizon, &tm);
         let horizon_delta = tm.slot_to_client_delta(horizon);
-        let mut rewards: Array1<f32> = Array1::zeros(self.num_queries_searched);
-        let mut query_ids: Array1<usize> = Array1::zeros(self.num_queries_searched);
         let mut rng = rand::thread_rng();
         let mut blocks: Vec<usize> = Vec::new();
+        // let start_id = probs.get_center_query_id(deltas[0]);
+        // debug!("start id:{:?}", start_id);
+        let start_id = min(
+            self.total_queries - 1,
+            max(0, probs.get_center_query_id(deltas[0])),
+        );
         for t in 0..horizon {
+            let mut rewards: Array1<f32> = Array1::zeros(self.num_queries_searched);
+            let mut query_ids: Array1<usize> = Array1::zeros(self.num_queries_searched);
             self.bfs_by_rewards(
                 &probs,
                 &query_num_blocks_in_cache,
@@ -181,7 +194,7 @@ impl BFSScheduler {
                 lows[t],
                 &mut rewards,
                 &mut query_ids,
-                1,
+                start_id,
             );
             // debug!("rewards: {:?}, query_ids: {:?}", rewards, query_ids);
             let qindex = self.sample_query_weighted_by_rewards(&rewards, &mut rng);
@@ -227,6 +240,7 @@ impl super::SchedulerTrait for BFSScheduler {
     ) -> Vec<usize> {
         let total_queries = self.total_queries;
         // dist indexed using the same index in queries vector
+        probs.print();
         let horizon = std::cmp::min(self.cachesize - start_idx, self.batch);
 
         if total_queries == 0 {
@@ -235,7 +249,7 @@ impl super::SchedulerTrait for BFSScheduler {
 
         let plan: Vec<usize> = {
             let plan = self.generate_bfs_plan(probs, horizon, state);
-            debug!("blocks sent: {:?}", plan);
+            // debug!("blocks sent: {:?}", plan);
             plan
         };
         plan

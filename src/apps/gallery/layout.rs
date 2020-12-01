@@ -55,7 +55,7 @@ impl Layout {
         queries_blcount: &indexmap::IndexMap<String, usize>,
     ) -> impl scheduler::ProbTrait {
         // what about applications that are hard to enumerate all possible queries before hand
-        debug!("userstate: {:?}", userstate);
+        // debug!("userstate: {:?}", userstate);
         let decoded_dist = {
             match userstate.model.trim() {
                 // "GM" => scheduler::decode_model(&userstate.data, layout_matrix),
@@ -72,32 +72,40 @@ impl Layout {
                                         panic!("unexpected dist {:?}", e);
                                     }
                                 };
-                            let (mut alpha, x, y) = scheduler::decode_point_model(&dist.p);
-                            let key = self.pixel_to_query(x, y);
-                            let key = serde_json::to_string(&key).unwrap();
-                            let index = {
-                                match queries_blcount.get_full(&key) {
-                                    Some((idx, _, _)) => idx,
-                                    None => {
-                                        alpha = 1.0; // don't use point distribution
-                                        0 // any index
-                                    }
-                                }
-                            };
+                            let (alpha, x, y) = scheduler::decode_point_model(&dist.p);
+                            let qx = (x / self.tile_dim as f64).floor() as usize;
+                            let qy = (y / self.tile_dim as f64).floor() as usize;
+                            // let key = self.pixel_to_query(x, y);
+                            // let key = serde_json::to_string(&key).unwrap();
+                            // let index = {
+                            //     match queries_blcount.get_full(&key) {
+                            //         Some((idx, _, _)) => idx,
+                            //         None => {
+                            //             alpha = 1.0; // don't use point distribution
+                            //             0 // any index
+                            //         }
+                            //     }
+                            // };
+                            let index = qx * self.factor as usize + qy;
 
                             // let mut prob = scheduler::decode_model(&dist.g, layout_matrix);
                             let mut prob = scheduler::decode_lazy_model(
                                 &dist.g,
-                                layout_matrix.len(),
+                                (self.factor * self.factor) as usize,
                                 self.tile_dim as f64,
                             );
+                            debug!("the prob model is {:?}", dist);
+                            // debug!(
+                            //     "qx is {:?}, qy is {:?}, factor is {:?}",
+                            //     qx, qy, self.factor
+                            // );
                             prob.set_point_dist(alpha, index);
 
                             // get the index of this query
-                            error!(
-                                "alpha {:?}, x: {:?}, y: {:?} key: {:?} index: {:?} dist : {:?}",
-                                alpha, x, y, key, index, dist
-                            );
+                            // error!(
+                            //     "alpha {:?}, x: {:?}, y: {:?} key: {:?} index: {:?} dist : {:?}",
+                            //     alpha, x, y, key, index, dist
+                            // );
                             prob
                         }
                         None => panic!("no match routine to decode this {}", userstate.model),

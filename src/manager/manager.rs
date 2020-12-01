@@ -83,7 +83,8 @@ impl SharedState {
         let timestamp = Instant::now();
         let cachesize = appstate.cachesize;
         let (queries_blcount, _) = app.lock().unwrap().get_scheduler_config();
-        let total_queries = queries_blcount.len();
+        // let total_queries = queries_blcount.len();
+        let total_queries = 250 * 250;
         let cache_sim = Arc::new(RwLock::new(super::CacheSimulator::new(
             cachesize,
             total_queries,

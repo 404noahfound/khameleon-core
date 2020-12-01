@@ -71,6 +71,10 @@ pub trait ProbTrait {
     fn get_center_query_id(&self, _delta: usize) -> usize {
         unimplemented!();
     }
+
+    fn print(&self) {
+        unimplemented!();
+    }
 }
 
 impl Prob {

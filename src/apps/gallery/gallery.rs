@@ -74,8 +74,8 @@ pub fn new(appstate: &ds::AppState, config: serde_json::Value) -> GalleryApp {
 
     let (db_path, dimension, factor): (String, u32, u32) = {
         let mut dbname_out = "db_default_f10";
-        let mut dimension = 10000; // dimension in pixels
-        let mut factor = 10; // how many imgs in a row/col
+        let mut dimension = 2500; // dimension in pixels
+        let mut factor = 250; // how many imgs in a row/col
         if let Some(config) = appstate.state.as_object() {
             info!("config: {:?}", config);
             if let Some(out) = config.get("dbname") {
@@ -182,6 +182,7 @@ pub fn new(appstate: &ds::AppState, config: serde_json::Value) -> GalleryApp {
         0.9887195657917105,
         0.9945076138786211,
         0.9999128860173208,
+        0.9999128860176208,
         1.0,
     ];
     //let utility: Vec<f32> = (0..max_blocks_count).enumerate().map(|(i, _)| (1.0 / max_blocks_count as f32)*(i as f32+1.0) ).collect();
@@ -230,7 +231,6 @@ impl GalleryApp {
                 let q = Query { x: x, y: y };
                 let key = GalleryApp::encode_key(&q);
                 println!("{}, {}, {:?}", x, y, key);
-                debug!("{}, {}, {:?}", x, y, key);
                 backend.set(key, bytes.clone());
             }
         }
@@ -356,7 +356,7 @@ impl GalleryApp {
             bytebuffer.append(&mut nblock);
             bytebuffer.append(&mut key_byte);
             bytebuffer.append(&mut block_byte);
-            info!("fake ImageBlock {}, incache: {} nblocks: {:?} block#: {:?} size: {:?}, blocksize: {:?}",  key, incache,nblocks, incache, bytebuffer.len(), size);
+            // info!("fake ImageBlock {}, incache: {} nblocks: {:?} block#: {:?} size: {:?}, blocksize: {:?}",  key, incache,nblocks, incache, bytebuffer.len(), size);
 
             sblocks.push(ds::StreamBlock::Binary(bytebuffer));
 
@@ -425,21 +425,27 @@ impl AppTrait for GalleryApp {
         count: usize,
         incache: usize,
     ) -> Option<Vec<ds::StreamBlock>> {
-        let kv = self.blocks_per_query.get_index(index);
-        match kv {
-            Some((k, _)) => {
-                //match self.config["use_netem"].as_bool() {
-                if self.config["use_mahimahi"].as_bool() == Some(true)
-                    || self.config["use_netem"].as_bool() == Some(true)
-                {
-                    self.get_fake_block_bytes(k, count, incache)
-                } else {
-                    // self.get_nblocks_bytes(k, count, incache)
-                    self.get_fake_block_bytes(k, count, incache)
-                }
-            }
-            None => None,
-        }
+        // let kv = self.blocks_per_query.get_index(index);
+        let q = Query {
+            x: index as u32 / 250,
+            y: index as u32 % 250,
+        };
+        let key = serde_json::to_string(&q).unwrap();
+        self.get_fake_block_bytes(&key, count, incache)
+        // match kv {
+        //     Some((k, _)) => {
+        //         //match self.config["use_netem"].as_bool() {
+        //         if self.config["use_mahimahi"].as_bool() == Some(true)
+        //             || self.config["use_netem"].as_bool() == Some(true)
+        //         {
+        //             self.get_fake_block_bytes(k, count, incache)
+        //         } else {
+        //             // self.get_nblocks_bytes(k, count, incache)
+        //             self.get_fake_block_bytes(k, count, incache)
+        //         }
+        //     }
+        //     None => None,
+        // }
     }
 
     fn get_nblocks_bykey(
@@ -482,10 +488,10 @@ mod tests {
         let img_file = "data/img_5_30_11.jpg";
         // this will create gallery with the same image to create
         // a gallery with different images comment the following line
-        // GalleryApp::setup(&db_path, &img_file, block_size, factor);
+        GalleryApp::setup(&db_path, &img_file, block_size, factor);
         // and uncomment the following two lines, update inputfolder to point
         // to the source of the gallery images
         let inputfolder = "data/progressive_f100";
-        GalleryApp::setup_all(&db_path, &inputfolder, block_size, factor);
+        // GalleryApp::setup_all(&db_path, &inputfolder, block_size, factor);
     }
 }
