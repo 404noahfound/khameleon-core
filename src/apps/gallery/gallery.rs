@@ -434,7 +434,8 @@ impl AppTrait for GalleryApp {
                 {
                     self.get_fake_block_bytes(k, count, incache)
                 } else {
-                    self.get_nblocks_bytes(k, count, incache)
+                    // self.get_nblocks_bytes(k, count, incache)
+                    self.get_fake_block_bytes(k, count, incache)
                 }
             }
             None => None,

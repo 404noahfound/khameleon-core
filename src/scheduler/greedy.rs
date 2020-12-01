@@ -3,14 +3,13 @@ use crate::ds;
 
 /// public lib
 extern crate rand;
-use crate::scheduler::prob::ProbTrait;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::Rng;
 use std::sync::{Arc, RwLock};
 
 extern crate ndarray;
-use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
+use ndarray::{Array1, Array2};
 
 #[derive(Clone)]
 pub struct GreedyScheduler {

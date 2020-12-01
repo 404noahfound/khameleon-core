@@ -16,11 +16,12 @@ pub mod bfs;
 pub mod decoders;
 pub mod greedy;
 pub mod ilp;
+pub mod lazyprob;
 pub mod prob;
-
 use crate::ds;
 
 pub use decoders::*;
+pub use lazyprob::LazyProb;
 use ndarray::Array1;
 pub use prob::Prob;
 pub use prob::ProbTrait;

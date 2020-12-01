@@ -1,129 +1,40 @@
+use crate::scheduler::prob::PointDist;
+use crate::scheduler::prob::ProbTrait;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Bound::{Excluded, Included};
 use std::time::Instant;
-
-#[derive(Clone, Debug)]
-pub struct Prob {
-    /// total queries supported by the app
+pub struct LazyProb {
     total_queries: usize,
-    probs_t: HashMap<usize, ProbInstance>,
+    probs_t: HashMap<usize, LazyProbInstance>,
     deltas_ms: BTreeSet<usize>,
     inf: f32,
     pub time: Instant,
+    num_row: usize,
     point_dist: PointDist,
 }
 
-#[derive(Clone, Debug)]
-pub struct ProbInstance {
-    /// queries not included in `dist` uniformly distribution with the (1.0 dist.values().sum())
-    rest_dist: f32,
-    /// explicit probability for queries indexed by their original index in app
-    dist: indexmap::IndexMap<usize, f32>,
-}
-
-impl ProbInstance {
-    pub fn get(&self, key: usize) -> f32 {
-        match self.dist.get(&key) {
-            Some(value) => (*value).abs(),
-            None => self.rest_dist,
-        }
-    }
-
-    pub fn get_k(&self) -> HashSet<usize> {
-        let queries: HashSet<usize> = self.dist.iter().map(|(&k, _)| k).collect();
-        queries
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct PointDist {
-    pub alpha: f32,
-    pub q_index: usize,
-}
-
-impl PointDist {
-    pub fn get_prob(&self, key: usize) -> f32 {
-        match key == self.q_index {
-            true => 1.0,
-            _ => 0.0,
-        }
-    }
-}
-
-pub trait ProbTrait {
-    fn get_probs_at(&self, key: usize, delta: usize) -> f32;
-    fn get_lower_bound(&self, delta_0: usize) -> usize;
-    fn get_k(&self) -> HashSet<usize> {
-        unimplemented!();
-    }
-    fn get_time(&self) -> Instant;
-    fn get(&self, _key: usize, _delta: usize) -> f32 {
-        unimplemented!();
-    }
-    /// given a delta t0 (ms) in the future, compute
-    /// the probability until delta tm for qid.
-    ///
-    /// assumptopm: delta_m > delta_0
-    fn integrate_over_range(&self, qid: usize, delta_0: usize, delta_m: usize, low: usize) -> f32;
-
-    fn get_center_query_id(&self, _delta: usize) -> usize {
-        unimplemented!();
-    }
-}
-
-impl Prob {
-    /// Helper to compute probability for a query at time t, if there are multiple distributions
-    /// at various times in the future.
-    ///
-    /// # Arguments
-    ///
-    /// * `total_queries`- Total queries the application support.
+impl LazyProb {
     pub fn new(total_queries: usize) -> Self {
-        // model per timestamp
-        let probs_t: HashMap<usize, ProbInstance> = HashMap::new();
-
-        // contain deltas_ms in the model
+        let probs_t: HashMap<usize, LazyProbInstance> = HashMap::new();
         let deltas_ms = BTreeSet::new();
-
-        // uniform probability
         let inf: f32 = 1.0 / total_queries as f32;
-
-        // to account for progress of time when quering for probabilites
         let time = Instant::now();
+        let num_row = (total_queries as f32).sqrt() as usize;
         let point_dist = PointDist {
             alpha: 1.0,
             q_index: 0,
         };
-
-        Prob {
+        LazyProb {
             total_queries: total_queries,
             probs_t: probs_t,
             deltas_ms: deltas_ms,
             inf: inf,
             time: time,
+            num_row: num_row,
             point_dist: point_dist,
         }
-    }
-
-    /// # Arguments
-    ///
-    /// * `dist` - {key: query index, value:  prob as f32}. queries not included are assigned
-    ///             uniform low probability
-    #[inline]
-    pub fn set_probs_at(&mut self, dist: indexmap::IndexMap<usize, f32>, delta: usize) {
-        // probability of the res tof queries not included in `dist`
-        let dist_sum: f32 = dist.values().sum();
-        let rest_dist: f32 = (1.0 - dist_sum) / self.total_queries as f32;
-        self.probs_t.insert(
-            delta,
-            ProbInstance {
-                rest_dist: rest_dist,
-                dist: dist,
-            },
-        );
-        self.deltas_ms.insert(delta);
     }
 
     pub fn set_point_dist(&mut self, alpha: f64, index: usize) {
@@ -133,6 +44,25 @@ impl Prob {
 
     pub fn get_linear_prob(&self, key: usize, p: f32) -> f32 {
         self.point_dist.alpha * p + (1.0 - self.point_dist.alpha) * self.point_dist.get_prob(key)
+    }
+
+    pub fn set_probs_at(&mut self, probs: LazyProbInstance, delta: usize) {
+        self.probs_t.insert(delta, probs);
+        self.deltas_ms.insert(delta);
+    }
+
+    pub fn set_probs_by_params(
+        &mut self,
+        delta: usize,
+        xmu: f64,
+        ymu: f64,
+        xsigma: f64,
+        ysigma: f64,
+    ) {
+        let num_row = self.num_row;
+        let num_col = num_row;
+        let probs = LazyProbInstance::new(xmu, ymu, xsigma, ysigma, num_row, num_col);
+        self.set_probs_at(probs, delta);
     }
 
     /// get the lower and upper bounds for t
@@ -159,7 +89,6 @@ impl Prob {
         mut j: usize,
     ) -> f32 {
         if i >= j || low > i || j > up || up < low {
-            //error!("XXX {} {} {} {}", i, j, low, up);
             return 0.0;
         }
 
@@ -180,12 +109,6 @@ impl Prob {
         let base = (j - i) as f32;
         // area between under linear curve from t to horizon
 
-        //let px = slop * (j as f32 - low as f32) + p0;
-        //let py = slop * (i as f32 - low as f32) + p0;
-        //let rect = base * px;
-        //let triang = base * (py - px) / 2.0;
-        //let p = rect + triang;
-
         let p = base * (p0 + slop * ((i as f32 + j as f32) / 2.0 - low as f32));
         if p < 0.0 {
             error!(
@@ -198,7 +121,7 @@ impl Prob {
     }
 }
 
-impl ProbTrait for Prob {
+impl ProbTrait for LazyProb {
     fn get_time(&self) -> Instant {
         self.time
     }
@@ -214,16 +137,6 @@ impl ProbTrait for Prob {
         let p = p0 + (delta - low) as f32 * slop;
         p
     }
-    fn get_k(&self) -> HashSet<usize> {
-        let mut all_queries: HashSet<usize> = HashSet::new();
-
-        for (_, p) in &self.probs_t {
-            all_queries = all_queries.union(&p.get_k()).map(|&k| k).collect();
-        }
-
-        all_queries.insert(self.point_dist.q_index);
-        all_queries
-    }
 
     /// use the given time to query the model
     #[inline]
@@ -233,7 +146,15 @@ impl ProbTrait for Prob {
             None => self.inf,
         };
 
-        self.get_linear_prob(key, p) // interpolate between point and gaussian distribution
+        self.get_linear_prob(key, p)
+    }
+
+    fn get_center_query_id(&self, delta: usize) -> usize {
+        let lower_bound = self.get_lower_bound(delta);
+        return match self.probs_t.get(&delta) {
+            Some(probs) => probs.get_center_query_id(),
+            None => 0,
+        };
     }
 
     fn get_lower_bound(&self, delta_0: usize) -> usize {
@@ -250,9 +171,6 @@ impl ProbTrait for Prob {
         low
     }
 
-    /// given a delta t0 (ms) in the future, compute
-    /// the probability until delta tm for qid
-    /// assumptopm: delta_m > delta_0
     #[inline]
     fn integrate_over_range(&self, qid: usize, delta_0: usize, delta_m: usize, low: usize) -> f32 {
         let mut p: f32 = 0.0;
@@ -283,5 +201,68 @@ impl ProbTrait for Prob {
         }
 
         p.abs()
+    }
+}
+
+/// LazyProb is assumed to be gaussian distribution
+pub struct LazyProbInstance {
+    xmu: f64,
+    ymu: f64,
+    xsigma: f64,
+    ysigma: f64,
+    num_row: usize,
+    num_col: usize,
+}
+
+#[inline]
+fn norm_cdf(x: f64, mu: f64, sigma: f64) -> f64 {
+    let z: f64 = (x - mu) / sigma;
+    const SQRT_2: f64 = 1.4142135623730951;
+    let y: f64 = z / SQRT_2;
+    let cdf: f64 = {
+        if x >= 3.0 {
+            0.5 * statrs::function::erf::erfc(-1.0 * y)
+        } else {
+            0.5 + 0.5 * statrs::function::erf::erf(y)
+        }
+    };
+
+    cdf
+}
+
+impl LazyProbInstance {
+    pub fn new(
+        xmu: f64,
+        ymu: f64,
+        xsigma: f64,
+        ysigma: f64,
+        num_row: usize,
+        num_col: usize,
+    ) -> Self {
+        LazyProbInstance {
+            xmu: xmu,
+            ymu: ymu,
+            xsigma: xsigma,
+            ysigma: ysigma,
+            num_row: num_row,
+            num_col: num_col,
+        }
+    }
+
+    #[inline]
+    pub fn get(&self, key: usize) -> f32 {
+        let x = (key / self.num_row) as f64;
+        let y = (key % self.num_row) as f64;
+        let xpw = norm_cdf(x, self.xmu, self.xsigma);
+        let xmw = norm_cdf(x + 1., self.xmu, self.xsigma);
+        let yph = norm_cdf(y, self.ymu, self.ysigma);
+        let ymh = norm_cdf(y + 1., self.ymu, self.ysigma);
+        let prob = xpw * yph - xpw * ymh - xmw * yph + xmw * ymh;
+        return prob as f32;
+    }
+
+    #[inline]
+    pub fn get_center_query_id(&self) -> usize {
+        (self.xmu as usize * self.num_row + self.ymu as usize) as usize
     }
 }

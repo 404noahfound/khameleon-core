@@ -1,3 +1,4 @@
+use super::lazyprob::LazyProb;
 use super::prob::Prob;
 use ndarray::{Array1, Array2, ArrayView1};
 use serde_derive::{Deserialize, Serialize};
@@ -169,5 +170,21 @@ pub fn decode_model(dist: &serde_json::Value, layout_matrix: &Array2<f32>) -> Pr
         }
     }
 
+    probs
+}
+
+pub fn decode_lazy_model(dist: &serde_json::Value, nqueries: usize) -> LazyProb {
+    let mut probs = LazyProb::new(nqueries);
+    if let Some(obj) = dist.as_object() {
+        for (time, model) in obj {
+            let time = time.parse::<i32>().unwrap();
+            let xmu = model["xmu"].as_f64().unwrap();
+            let ymu = model["ymu"].as_f64().unwrap();
+            // does not take into account correlation
+            let xsigma = model["xsigma"].as_f64().unwrap();
+            let ysigma = model["ysigma"].as_f64().unwrap();
+            probs.set_probs_by_params(time as usize, xmu, ymu, xsigma, ysigma);
+        }
+    }
     probs
 }

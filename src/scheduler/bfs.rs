@@ -234,17 +234,6 @@ impl super::SchedulerTrait for BFSScheduler {
         }
 
         let plan: Vec<usize> = {
-            // for each query, and for each slot in cache, store the probability of that query
-            // let (mut prob_matrix, queries_ids) =
-            //     self.integrate_probs_partition(probs, total_queries, horizon);
-            // let plan = self.greedy_partition(
-            //     queries_ids,
-            //     horizon,
-            //     &mut prob_matrix,
-            //     total_queries,
-            //     &self.utility,
-            //     state,
-            // );
             let plan = self.generate_bfs_plan(probs, horizon, state);
             debug!("blocks sent: {:?}", plan);
             plan

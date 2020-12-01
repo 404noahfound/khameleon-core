@@ -58,7 +58,8 @@ impl Layout {
         debug!("userstate: {:?}", userstate);
         let decoded_dist = {
             match userstate.model.trim() {
-                "GM" => scheduler::decode_model(&userstate.data, layout_matrix),
+                // "GM" => scheduler::decode_model(&userstate.data, layout_matrix),
+                // "GM" => scheduler::decode_lazy_model(&userstate.data, layout_matrix.len()),
                 "LGP" => {
                     match userstate.data.as_object() {
                         Some(obj) => {
@@ -84,8 +85,9 @@ impl Layout {
                                 }
                             };
 
-                            let mut prob = scheduler::decode_model(&dist.g, layout_matrix);
-
+                            // let mut prob = scheduler::decode_model(&dist.g, layout_matrix);
+                            let mut prob =
+                                scheduler::decode_lazy_model(&dist.g, layout_matrix.len());
                             prob.set_point_dist(alpha, index);
 
                             // get the index of this query
