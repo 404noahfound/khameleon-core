@@ -173,16 +173,16 @@ pub fn decode_model(dist: &serde_json::Value, layout_matrix: &Array2<f32>) -> Pr
     probs
 }
 
-pub fn decode_lazy_model(dist: &serde_json::Value, nqueries: usize) -> LazyProb {
+pub fn decode_lazy_model(dist: &serde_json::Value, nqueries: usize, tile_dim: f64) -> LazyProb {
     let mut probs = LazyProb::new(nqueries);
     if let Some(obj) = dist.as_object() {
         for (time, model) in obj {
             let time = time.parse::<i32>().unwrap();
-            let xmu = model["xmu"].as_f64().unwrap();
-            let ymu = model["ymu"].as_f64().unwrap();
+            let xmu = model["xmu"].as_f64().unwrap() / tile_dim;
+            let ymu = model["ymu"].as_f64().unwrap() / tile_dim;
             // does not take into account correlation
-            let xsigma = model["xsigma"].as_f64().unwrap();
-            let ysigma = model["ysigma"].as_f64().unwrap();
+            let xsigma = model["xsigma"].as_f64().unwrap() / tile_dim;
+            let ysigma = model["ysigma"].as_f64().unwrap() / tile_dim;
             probs.set_probs_by_params(time as usize, xmu, ymu, xsigma, ysigma);
         }
     }

@@ -86,8 +86,11 @@ impl Layout {
                             };
 
                             // let mut prob = scheduler::decode_model(&dist.g, layout_matrix);
-                            let mut prob =
-                                scheduler::decode_lazy_model(&dist.g, layout_matrix.len());
+                            let mut prob = scheduler::decode_lazy_model(
+                                &dist.g,
+                                layout_matrix.len(),
+                                self.tile_dim as f64,
+                            );
                             prob.set_point_dist(alpha, index);
 
                             // get the index of this query
