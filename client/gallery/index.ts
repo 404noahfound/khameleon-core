@@ -1,12 +1,14 @@
-import { Engine, KalmanFilter,
-  ContinuesLogger} from "../khameleon-core";
+import {
+  Engine, KalmanFilter,
+  ContinuesLogger
+} from "../khameleon-core";
 import { Gallery } from "../apps";
 
 const DEFAULT_APP_CONFIG = {
   dbname: "db_default_f10",
   factor: 10,
-  tile_dimension: 600,
-  
+  tile_dimension: 10000,
+
   request: 0, // direct request
   progressive: 1, // to adjust cache size
 
@@ -15,14 +17,14 @@ const DEFAULT_APP_CONFIG = {
 };
 
 function instance(opt?) {
-  const config = { ...DEFAULT_APP_CONFIG, ...(opt || {})};
+  const config = { ...DEFAULT_APP_CONFIG, ...(opt || {}) };
 
   let logger = new ContinuesLogger();
   let predictor = new KalmanFilter(logger);
-  
+
   config.cacheConfig = {
-        cache: config.cachetype,
-        cacheSize: config.cachesize,
+    cache: config.cachetype,
+    cacheSize: config.cachesize,
   };
 
   const vizApp = new Gallery(config, logger);

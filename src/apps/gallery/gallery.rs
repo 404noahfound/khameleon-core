@@ -74,7 +74,7 @@ pub fn new(appstate: &ds::AppState, config: serde_json::Value) -> GalleryApp {
 
     let (db_path, dimension, factor): (String, u32, u32) = {
         let mut dbname_out = "db_default_f10";
-        let mut dimension = 600; // dimension in pixels
+        let mut dimension = 10000; // dimension in pixels
         let mut factor = 10; // how many imgs in a row/col
         if let Some(config) = appstate.state.as_object() {
             info!("config: {:?}", config);
