@@ -9,3 +9,4 @@ manager_started.flag
 log
 .vscode/settings.json
 .vscode/launch.json
+traces/*.log

@@ -14,6 +14,8 @@ const DEFAULT_APP_CONFIG = {
 
   cachesize: 10000,
   cachetype: "ringIndex",
+  duration: 1000 * 10, // 10 seconds
+  logTrace: true
 };
 
 function instance(opt?) {
