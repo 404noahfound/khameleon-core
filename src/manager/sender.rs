@@ -103,12 +103,12 @@ pub fn start(
                             match w {
                                 Ok(_) => {
                                     total_blocks += 1;
-                                    debug!(
-                                        "sending took: {:?} retrieval: {:?} cache_update: {:?}",
-                                        sending_start.elapsed(),
-                                        retrieval_time,
-                                        cache_update_time
-                                    );
+                                    // debug!(
+                                    //     "sending took: {:?} retrieval: {:?} cache_update: {:?}",
+                                    //     sending_start.elapsed(),
+                                    //     retrieval_time,
+                                    //     cache_update_time
+                                    // );
                                     if sending_start.elapsed().as_millis() > 1 {
                                         error!("congestion {:?}", sending_start.elapsed());
                                     }

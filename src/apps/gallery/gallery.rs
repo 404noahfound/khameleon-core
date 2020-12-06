@@ -74,8 +74,8 @@ pub fn new(appstate: &ds::AppState, config: serde_json::Value) -> GalleryApp {
 
     let (db_path, dimension, factor): (String, u32, u32) = {
         let mut dbname_out = "db_default_f10";
-        let mut dimension = 2500; // dimension in pixels
-        let mut factor = 250; // how many imgs in a row/col
+        let mut dimension = 10000; // dimension in pixels
+        let mut factor = 1000; // how many imgs in a row/col
         if let Some(config) = appstate.state.as_object() {
             info!("config: {:?}", config);
             if let Some(out) = config.get("dbname") {
@@ -427,8 +427,8 @@ impl AppTrait for GalleryApp {
     ) -> Option<Vec<ds::StreamBlock>> {
         // let kv = self.blocks_per_query.get_index(index);
         let q = Query {
-            x: index as u32 / 250,
-            y: index as u32 % 250,
+            x: index as u32 / 1000,
+            y: index as u32 % 1000,
         };
         let key = serde_json::to_string(&q).unwrap();
         self.get_fake_block_bytes(&key, count, incache)

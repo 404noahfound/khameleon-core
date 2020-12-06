@@ -6,16 +6,17 @@ import { Gallery } from "../apps";
 
 const DEFAULT_APP_CONFIG = {
   dbname: "db_default_f10",
-  factor: 250,
-  tile_dimension: 2500,
+  factor: 1000,
+  tile_dimension: 10000,
 
   request: 0, // direct request
   progressive: 1, // to adjust cache size
 
   cachesize: 10000,
   cachetype: "ringIndex",
-  duration: 1000 * 10, // 10 seconds
-  logTrace: true
+  duration: 1000 * 30, // 30 seconds
+  logTrace: true,
+  // load_trace_mode: true,
 };
 
 function instance(opt?) {

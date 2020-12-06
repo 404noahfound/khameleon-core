@@ -1,4 +1,5 @@
 import { App, Engine, Data, SystemLogger } from "../../khameleon-core";
+import trace from "../../static/data/trace/session-anon-1607198854467.json";
 import * as d3 from "d3";
 import * as _ from 'underscore';
 
@@ -21,12 +22,14 @@ export class Gallery implements App {
   private prevData: Query | undefined = undefined;
   public appName: string = "Gallery";
   private dbname: string;
+  private load_trace_mode: boolean;
 
   constructor(private sysconfig, private logger) {
     this.factor = (sysconfig && sysconfig.factor) ? sysconfig.factor : 10;
     this.image_holder_dimension = (sysconfig && sysconfig.image_holder_dimension) ? sysconfig.image_holder_dimension : 800;
     this.tile_dimension = (sysconfig && sysconfig.tile_dimension) ? sysconfig.tile_dimension : 600;
     this.path = (sysconfig && sysconfig.path) ? sysconfig.path : "static/data/";
+    this.load_trace_mode = (sysconfig && sysconfig.load_trace_mode) ? sysconfig.load_trace_mode : false;
 
     this.dbname = (sysconfig && sysconfig.dbname) ? sysconfig.dbname : "db_default_f10";
   }
@@ -140,7 +143,7 @@ export class Gallery implements App {
       .attr("preserveAspectRatio", "xMidYMin slice")
       /* Draggable viewport */
       .on("mousemove", function () {
-        if (!that.move) {
+        if (that.load_trace_mode || !that.move) {
           return;
         }
 
@@ -156,8 +159,33 @@ export class Gallery implements App {
       })
       .on("click", () => {
         this.move = !this.move
+        if (this.load_trace_mode) {
+          this.load_and_run_trace()
+        }
       });
   }
+
+  delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async load_and_run_trace() {
+    let last_timestamp: any = trace[0].e[2];
+    for (let trace_entry of trace) {
+      let new_timestamp: any = trace_entry.e[2];
+      let pause_interval: any = new_timestamp - last_timestamp;
+      let x = trace_entry.e[0];
+      let y = trace_entry.e[1];
+      let query = this.getQueryByPosition(x, y);
+      if (query) {
+        this.sendQuery(query);
+      }
+      await this.delay(pause_interval);
+      console.log(pause_interval);
+      last_timestamp = new_timestamp;
+    }
+  }
+
 
   getQueryByPosition(x, y): Query | undefined {
     const tile_dim = this.tile_dimension / this.factor;

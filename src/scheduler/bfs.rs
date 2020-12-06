@@ -59,7 +59,7 @@ pub fn new(
     blocks_per_query: Vec<usize>,
     tm: Arc<RwLock<ds::TimeManager>>,
 ) -> BFSScheduler {
-    let total_queries = 250 * 250;
+    let total_queries = 1000 * 1000;
     let max_blocks_count = utility.len();
     // TODO: cost too much for large query space
     let mut utility_matrix: Array2<f32> = Array2::zeros((total_queries, max_blocks_count));
