@@ -15,8 +15,8 @@ const DEFAULT_APP_CONFIG = {
   cachesize: 10000,
   cachetype: "ringIndex",
   duration: 1000 * 30, // 30 seconds
-  logTrace: true,
-  // load_trace_mode: true,
+  // logTrace: true,
+  load_trace_mode: true,
 };
 
 function instance(opt?) {
@@ -39,4 +39,4 @@ function instance(opt?) {
 
 
 let { predictor } = instance();
-predictor.logger.start();
+predictor.logger.start(DEFAULT_APP_CONFIG.load_trace_mode);

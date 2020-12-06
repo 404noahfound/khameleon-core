@@ -1,5 +1,5 @@
 import { App, Engine, Data, SystemLogger } from "../../khameleon-core";
-import trace from "../../static/data/trace/session-anon-1607198854467.json";
+import trace from "../../static/data/trace/1M-30s.json";
 import * as d3 from "d3";
 import * as _ from 'underscore';
 
@@ -170,20 +170,30 @@ export class Gallery implements App {
   }
 
   async load_and_run_trace() {
+    this.logger.trace = [];
     let last_timestamp: any = trace[0].e[2];
+    // let recomputedTime = Date.now(); // time stored in the trace is an absolute value in the past, need to convert it to current time such that logger works properly
     for (let trace_entry of trace) {
       let new_timestamp: any = trace_entry.e[2];
       let pause_interval: any = new_timestamp - last_timestamp;
+      await this.delay(pause_interval);
+      last_timestamp = new_timestamp;
+      // recomputedTime += pause_interval;
+      trace_entry.e[2] = Date.now();
+      // console.log(trace_entry, Date.now());
       let x = trace_entry.e[0];
       let y = trace_entry.e[1];
+      this.logger.last_point = trace_entry.e;
+      this.logger.updateTrace(trace_entry.e);
       let query = this.getQueryByPosition(x, y);
       if (query) {
         this.sendQuery(query);
       }
-      await this.delay(pause_interval);
-      console.log(pause_interval);
-      last_timestamp = new_timestamp;
+      // console.log(pause_interval);
     }
+    console.log("trace is");
+    console.log(this.logger.trace);
+    location.reload(); // reload page to stop sending query
   }
 
 

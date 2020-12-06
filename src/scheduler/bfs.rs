@@ -4,18 +4,17 @@ use crate::ds;
 extern crate ordered_float;
 /// public lib
 extern crate rand;
-use crate::scheduler::prob::ProbTrait;
 use ordered_float::NotNan;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
-use rand::Rng;
 use std::cmp::max;
 use std::cmp::min;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 extern crate ndarray;
-use ndarray::{Array1, Array2, ArrayView2, ArrayViewMut2};
+use ndarray::{Array1, Array2};
+use std::time::Instant;
 
 #[derive(Clone)]
 pub struct BFSScheduler {
@@ -238,6 +237,7 @@ impl super::SchedulerTrait for BFSScheduler {
         state: Array1<usize>,
         start_idx: usize,
     ) -> Vec<usize> {
+        let start = Instant::now();
         let total_queries = self.total_queries;
         // dist indexed using the same index in queries vector
         probs.print();
@@ -252,6 +252,7 @@ impl super::SchedulerTrait for BFSScheduler {
             // debug!("blocks sent: {:?}", plan);
             plan
         };
+        debug!("scheduler time: {:?}", start.elapsed());
         plan
     }
 }
