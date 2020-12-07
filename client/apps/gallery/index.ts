@@ -147,8 +147,6 @@ export class Gallery implements App {
           return;
         }
 
-        //const x = d3.mouse(this)[0];
-        //const y = d3.mouse(this)[1];
         const x = that.logger.last_point[0];
         const y = that.logger.last_point[1];
 
@@ -172,11 +170,12 @@ export class Gallery implements App {
   async load_and_run_trace() {
     this.logger.trace = [];
     let last_timestamp: any = trace[0].e[2];
-    // let recomputedTime = Date.now(); // time stored in the trace is an absolute value in the past, need to convert it to current time such that logger works properly
     for (let trace_entry of trace) {
       let new_timestamp: any = trace_entry.e[2];
       let pause_interval: any = new_timestamp - last_timestamp;
-      await this.delay(pause_interval);
+      // while (Date.now() < last_time + pause_interval) { console.log(Date.now()) }
+      await this.delay(pause_interval * 100);
+      // await this.delay(1000);
       last_timestamp = new_timestamp;
       // recomputedTime += pause_interval;
       trace_entry.e[2] = Date.now();
@@ -185,6 +184,7 @@ export class Gallery implements App {
       let y = trace_entry.e[1];
       this.logger.last_point = trace_entry.e;
       this.logger.updateTrace(trace_entry.e);
+      this.logger.formalize();
       let query = this.getQueryByPosition(x, y);
       if (query) {
         this.sendQuery(query);

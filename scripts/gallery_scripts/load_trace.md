@@ -1,0 +1,1 @@
+To load trace and simulate user interactions in the log, go to client/gallery/index.ts and change `load_trace_mode` to be true.
