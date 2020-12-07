@@ -1,5 +1,5 @@
 import { App, Engine, Data, SystemLogger } from "../../khameleon-core";
-import trace from "../../static/data/trace/1M-30s.json";
+import trace from "../../static/data/trace/1M-30s-v2.json";
 import * as d3 from "d3";
 import * as _ from 'underscore';
 
@@ -26,7 +26,7 @@ export class Gallery implements App {
 
   constructor(private sysconfig, private logger) {
     this.factor = (sysconfig && sysconfig.factor) ? sysconfig.factor : 10;
-    this.image_holder_dimension = (sysconfig && sysconfig.image_holder_dimension) ? sysconfig.image_holder_dimension : 800;
+    this.image_holder_dimension = (sysconfig && sysconfig.image_holder_dimension) ? sysconfig.image_holder_dimension : 200;
     this.tile_dimension = (sysconfig && sysconfig.tile_dimension) ? sysconfig.tile_dimension : 600;
     this.path = (sysconfig && sysconfig.path) ? sysconfig.path : "static/data/";
     this.load_trace_mode = (sysconfig && sysconfig.load_trace_mode) ? sysconfig.load_trace_mode : false;
@@ -89,6 +89,10 @@ export class Gallery implements App {
     large_view_svg
       .attr("id", "large_view")
       .style("border", "2px solid black")
+      .style('position', 'fixed')
+      .style('left', 0)
+      .style('top', 0)
+      .style("z-index", "1000")
       .attr("width", dim)
       .attr("height", dim);
 
@@ -112,7 +116,7 @@ export class Gallery implements App {
       .style("height", "100px")
       .style("border", "3px solid #73AD21")
       .style("z-index", "1000")
-      .style("font-size", "100px")
+      .style("font-size", "60px")
       .text("Utility X");
 
     const small_view_svg = d3.select("body").append("div")
@@ -173,13 +177,9 @@ export class Gallery implements App {
     for (let trace_entry of trace) {
       let new_timestamp: any = trace_entry.e[2];
       let pause_interval: any = new_timestamp - last_timestamp;
-      // while (Date.now() < last_time + pause_interval) { console.log(Date.now()) }
-      await this.delay(pause_interval * 100);
-      // await this.delay(1000);
+      await this.delay(pause_interval);
       last_timestamp = new_timestamp;
-      // recomputedTime += pause_interval;
       trace_entry.e[2] = Date.now();
-      // console.log(trace_entry, Date.now());
       let x = trace_entry.e[0];
       let y = trace_entry.e[1];
       this.logger.last_point = trace_entry.e;
@@ -189,7 +189,6 @@ export class Gallery implements App {
       if (query) {
         this.sendQuery(query);
       }
-      // console.log(pause_interval);
     }
     console.log("trace is");
     console.log(this.logger.trace);

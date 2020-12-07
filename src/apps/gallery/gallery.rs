@@ -369,6 +369,7 @@ impl GalleryApp {
         key: &str,
         count: usize,
         incache: usize,
+        logical_key: &str,
     ) -> Option<Vec<ds::StreamBlock>> {
         if let Some(blocks_bytes) = self.backend.get(key.as_bytes().to_vec()) {
             let mut sblocks: Vec<ds::StreamBlock> = Vec::new();
@@ -396,7 +397,7 @@ impl GalleryApp {
                 let size: u32 = block_byte.len() as u32;
                 let mut block_id = bincode::serialize(&block.block_id).unwrap();
                 let mut nblock = bincode::serialize(&nblocks).unwrap();
-                let mut key_byte = bincode::serialize(&key).unwrap();
+                let mut key_byte = bincode::serialize(&logical_key).unwrap();
 
                 bytebuffer.append(&mut block_id);
                 bytebuffer.append(&mut nblock);
@@ -425,27 +426,24 @@ impl AppTrait for GalleryApp {
         count: usize,
         incache: usize,
     ) -> Option<Vec<ds::StreamBlock>> {
-        // let kv = self.blocks_per_query.get_index(index);
-        let q = Query {
+        let q_logical = Query {
             x: index as u32 / 1000,
             y: index as u32 % 1000,
         };
-        let key = serde_json::to_string(&q).unwrap();
-        self.get_fake_block_bytes(&key, count, incache)
-        // match kv {
-        //     Some((k, _)) => {
-        //         //match self.config["use_netem"].as_bool() {
-        //         if self.config["use_mahimahi"].as_bool() == Some(true)
-        //             || self.config["use_netem"].as_bool() == Some(true)
-        //         {
-        //             self.get_fake_block_bytes(k, count, incache)
-        //         } else {
-        //             // self.get_nblocks_bytes(k, count, incache)
-        //             self.get_fake_block_bytes(k, count, incache)
-        //         }
-        //     }
-        //     None => None,
-        // }
+        let key_logical = serde_json::to_string(&q_logical).unwrap();
+        let q_physical = Query {
+            x: q_logical.x % 10,
+            y: q_logical.y % 10,
+        };
+        // let key_physical = serde_json::to_string(&q_physical).unwrap();
+        // self.get_fake_block_bytes(&key_physical, count, incache)
+        let kv = self
+            .blocks_per_query
+            .get_index((q_physical.x * 10 + q_physical.y) as usize);
+        match kv {
+            Some((k, _)) => self.get_nblocks_bytes(k, count, incache, &key_logical),
+            None => None,
+        }
     }
 
     fn get_nblocks_bykey(
@@ -454,7 +452,7 @@ impl AppTrait for GalleryApp {
         count: usize,
         incache: usize,
     ) -> Option<Vec<ds::StreamBlock>> {
-        self.get_nblocks_bytes(key, count, incache)
+        self.get_nblocks_bytes(key, count, incache, key)
     }
 
     fn decode_dist(&mut self, userstate: ds::PredictorState) -> Box<dyn scheduler::ProbTrait> {
@@ -485,13 +483,13 @@ mod tests {
         let factor: u32 = 10;
         let block_size = 20 * 1024;
         let db_path = "data/db_default_f10";
-        let img_file = "data/img_5_30_11.jpg";
+        // let img_file = "data/img_5_30_11.jpg";
         // this will create gallery with the same image to create
         // a gallery with different images comment the following line
-        GalleryApp::setup(&db_path, &img_file, block_size, factor);
+        // GalleryApp::setup(&db_path, &img_file, block_size, factor);
         // and uncomment the following two lines, update inputfolder to point
         // to the source of the gallery images
         let inputfolder = "data/progressive_f100";
-        // GalleryApp::setup_all(&db_path, &inputfolder, block_size, factor);
+        GalleryApp::setup_all(&db_path, &inputfolder, block_size, factor);
     }
 }

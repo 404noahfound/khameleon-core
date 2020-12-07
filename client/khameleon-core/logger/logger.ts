@@ -31,7 +31,7 @@ export class ContinuesLogger {
         this.elem = opts.elem || document;
     }
 
-    start(load_trace_mode = true) {
+    start(load_trace_mode = false) {
         if (!load_trace_mode) {
             this.bind(this.elem);
         }
