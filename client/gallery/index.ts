@@ -16,8 +16,8 @@ const DEFAULT_APP_CONFIG = {
   cachetype: "ringIndex",
   duration: 1000 * 30, // 30 seconds
   // logTrace: true,
-  // load_trace_mode: false,
-  load_trace_mode: true,
+  load_trace_mode: false,
+  // load_trace_mode: true,
 };
 
 function instance(opt?) {

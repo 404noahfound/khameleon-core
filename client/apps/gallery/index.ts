@@ -23,6 +23,7 @@ export class Gallery implements App {
   public appName: string = "Gallery";
   private dbname: string;
   private load_trace_mode: boolean;
+  private query_stats: {};
 
   constructor(private sysconfig, private logger) {
     this.factor = (sysconfig && sysconfig.factor) ? sysconfig.factor : 10;
@@ -32,6 +33,7 @@ export class Gallery implements App {
     this.load_trace_mode = (sysconfig && sysconfig.load_trace_mode) ? sysconfig.load_trace_mode : false;
 
     this.dbname = (sysconfig && sysconfig.dbname) ? sysconfig.dbname : "db_default_f10";
+    this.query_stats = {};
   }
 
   bindEngine(engine: Engine) {
@@ -161,6 +163,7 @@ export class Gallery implements App {
       })
       .on("click", () => {
         this.move = !this.move
+        this.log_stats_async()
         if (this.load_trace_mode) {
           this.load_and_run_trace()
         }
@@ -169,6 +172,12 @@ export class Gallery implements App {
 
   delay(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async log_stats_async() {
+    await this.delay(1000 * 30);
+    console.log("The stats for the past 30 seconds")
+    console.log(this.query_stats);
   }
 
   async load_and_run_trace() {
@@ -214,7 +223,6 @@ export class Gallery implements App {
     if (x_img >= qmax || y_img >= qmax || x_img < 0 || y_img < 0) {
       return undefined;
     }
-    console.log("position", x, y, x_img, y_img);
     return { "x": x_img, "y": y_img };
   }
 
@@ -260,7 +268,14 @@ export class Gallery implements App {
         break;
       }
     }
-
+    // console.log(req, blocks.size, nblocks);
+    if (!(req in this.query_stats)) {
+      this.query_stats[req] = { start_time: Date.now(), start_nblocks: i };
+    }
+    let stat = this.query_stats[req];
+    if (!('fair_quality_time' in stat) && blocks.size >= nblocks / 2) {
+      stat.fair_quality_time = Date.now() - stat.start_time;
+    }
     let img_dir = URL.createObjectURL(new Blob(image_data));
 
     d3.select("#utility")
