@@ -88,7 +88,7 @@ export class Gallery implements App {
     /* Main View */
     large_view_svg
       .attr("id", "large_view")
-      .style("border", "2px solid black")
+      // .style("border", "2px solid black")
       .style('position', 'fixed')
       .style('left', 0)
       .style('top', 0)
@@ -124,7 +124,7 @@ export class Gallery implements App {
       .style("top", "0px")
       .style("width", tile_dim + "px")
       .style("height", tile_dim + "px")
-      .style("border", "2px solid black")
+      // .style("border", "2px solid black")
       .style("position", "absolute")
       .append("svg");
 
@@ -214,6 +214,7 @@ export class Gallery implements App {
     if (x_img >= qmax || y_img >= qmax || x_img < 0 || y_img < 0) {
       return undefined;
     }
+    console.log("position", x, y, x_img, y_img);
     return { "x": x_img, "y": y_img };
   }
 
