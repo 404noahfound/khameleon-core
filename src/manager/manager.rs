@@ -480,7 +480,8 @@ impl Manager {
         let app2 = Arc::clone(&state.app);
 
         let (queries_blcount, utility) = app1.lock().unwrap().get_scheduler_config();
-        let total_queries = queries_blcount.len();
+        // let total_queries = queries_blcount.len();
+        let total_queries = 1000000;
 
         let state_change_flag = state.state_change_flag.clone();
         let cachesize = state.appstate.cachesize;
@@ -534,7 +535,7 @@ impl Manager {
         let worker1 = thread::spawn(move || {
             let blocks_per_query: Vec<usize> = queries_blcount.iter().map(|(_k, &v)| v).collect();
             let continues = false;
-            let schedtype = scheduler::SchedulerType::BFS;
+            let schedtype = scheduler::SchedulerType::Greedy;
             let time_to_converge = 300;
             let batch = 100;
             let sched = scheduler::new(

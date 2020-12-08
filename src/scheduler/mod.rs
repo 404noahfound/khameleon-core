@@ -66,7 +66,7 @@ pub fn new(
     };
 
     let max_blocks_count = blocks_per_query.iter().cloned().max().unwrap_or_else(|| 0);
-    let total_queries = blocks_per_query.len();
+    let total_queries = 1000 * 1000;
     // init utility array function and the utility for the queries
     let utility = discretise_utility(utility, max_blocks_count);
     match stype {

@@ -28,21 +28,21 @@ impl Layout {
         gallery::Query { x: qx, y: qy }
     }
 
-    pub fn get_layout(&self, queries: &Vec<String>) -> Array2<f32> {
-        let nqueries = queries.len();
+    pub fn get_layout(&self, _queries: &Vec<String>) -> Array2<f32> {
+        // let nqueries = queries.len();
+        let nqueries = 1000000;
+        let factor = 1000;
         let mut layout_matrix: Array2<f32> = Array2::ones((nqueries, 4));
-        for (query_index, q) in queries.iter().enumerate() {
-            let query: gallery::Query = serde_json::from_str(q).unwrap();
-
-            let x_min = query.x as f32 * self.tile_dim;
-            let y_min = query.y as f32 * self.tile_dim;
-            let x_max = (query.x + 1) as f32 * self.tile_dim;
-            let y_max = (query.y + 1) as f32 * self.tile_dim;
-
-            //layout_matrix.column
-            layout_matrix
-                .slice_mut(s![query_index.., ..])
-                .assign(&arr1(&[x_min, x_max, y_min, y_max]));
+        for x in 0..factor {
+            for y in 0..factor {
+                let x_min = x as f32 * self.tile_dim;
+                let y_min = y as f32 * self.tile_dim;
+                let x_max = (x + 1) as f32 * self.tile_dim;
+                let y_max = (y + 1) as f32 * self.tile_dim;
+                layout_matrix
+                    .slice_mut(s![x * factor + y, ..])
+                    .assign(&arr1(&[x_min, x_max, y_min, y_max]));
+            }
         }
 
         layout_matrix
@@ -88,13 +88,13 @@ impl Layout {
                             // };
                             let index = qx * self.factor as usize + qy;
 
-                            // let mut prob = scheduler::decode_model(&dist.g, layout_matrix);
-                            let mut prob = scheduler::decode_lazy_model(
-                                &dist.g,
-                                (self.factor * self.factor) as usize,
-                                self.tile_dim as f64,
-                            );
-                            debug!("the prob model is {:?}", dist);
+                            let mut prob = scheduler::decode_model(&dist.g, layout_matrix);
+                            // let mut prob = scheduler::decode_lazy_model(
+                            //     &dist.g,
+                            //     (self.factor * self.factor) as usize,
+                            //     self.tile_dim as f64,
+                            // );
+                            // debug!("the prob model is {:?}", dist);
                             // debug!(
                             //     "qx is {:?}, qy is {:?}, factor is {:?}",
                             //     qx, qy, self.factor

@@ -10,6 +10,7 @@ use std::sync::{Arc, RwLock};
 
 extern crate ndarray;
 use ndarray::{Array1, Array2};
+use std::time::Instant;
 
 #[derive(Clone)]
 pub struct GreedyScheduler {
@@ -51,15 +52,17 @@ pub fn new(
     blocks_per_query: Vec<usize>,
     tm: Arc<RwLock<ds::TimeManager>>,
 ) -> GreedyScheduler {
-    let total_queries = blocks_per_query.len();
+    let total_queries = 1000 * 1000;
     let max_blocks_count = utility.len();
     // TODO: cost too much for large query space
     let mut utility_matrix: Array2<f32> = Array2::zeros((total_queries, max_blocks_count));
 
-    populate_utility_matrix(&mut utility_matrix, &blocks_per_query, &utility);
-
-    let blocks_per_query: Array1<usize> = blocks_per_query.iter().map(|v| *v).collect();
-
+    let repeated_bpq = std::iter::repeat(blocks_per_query.into_iter())
+        .take(10000)
+        .flatten()
+        .collect::<Vec<_>>();
+    populate_utility_matrix(&mut utility_matrix, &repeated_bpq, &utility);
+    let blocks_per_query: Array1<usize> = repeated_bpq.iter().map(|v| *v).collect();
     GreedyScheduler {
         cachesize: cachesize,
         utility: utility,
@@ -216,6 +219,7 @@ impl super::SchedulerTrait for GreedyScheduler {
         state: Array1<usize>,
         start_idx: usize,
     ) -> Vec<usize> {
+        let start = Instant::now();
         let total_queries = self.total_queries;
         // dist indexed using the same index in queries vector
         let horizon = std::cmp::min(self.cachesize - start_idx, self.batch);
@@ -223,7 +227,7 @@ impl super::SchedulerTrait for GreedyScheduler {
         if total_queries == 0 {
             return Vec::new();
         }
-
+        debug!("full stat total_queries: {:?}", total_queries);
         let plan: Vec<usize> = {
             // for each query, and for each slot in cache, store the probability of that query
             let (mut prob_matrix, queries_ids) =
@@ -238,6 +242,7 @@ impl super::SchedulerTrait for GreedyScheduler {
             );
             plan
         };
+        debug!("scheduler time: {:?}", start.elapsed());
         plan
     }
 }
