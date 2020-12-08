@@ -175,8 +175,8 @@ export class Gallery implements App {
   }
 
   async log_stats_async() {
-    await this.delay(1000 * 30);
-    console.log("The stats for the past 30 seconds")
+    await this.delay(1000 * 60);
+    console.log("The stats for the past 60 seconds")
     console.log(this.query_stats);
   }
 
